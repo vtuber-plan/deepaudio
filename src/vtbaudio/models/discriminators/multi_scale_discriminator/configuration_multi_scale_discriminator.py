@@ -7,7 +7,7 @@ from ....utils import logging
 
 logger = logging.get_logger(__name__)
 
-class ScaleConfig(DiscriminatorConfig):
+class PeriodScaleConfig(DiscriminatorConfig):
     model_type = "scale_discriminator"
     attribute_map = {
         "period": "scale",

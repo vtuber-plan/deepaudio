@@ -69,6 +69,9 @@ class AudioModelConfig(PushToHubMixin):
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
+class DiscriminatorConfig(AudioModelConfig):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
 class VocoderConfig(AudioModelConfig):
     def __init__(self, **kwargs) -> None:

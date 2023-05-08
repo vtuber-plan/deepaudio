@@ -1,4 +1,4 @@
-""" Shami configuration"""
+""" HifiGAN configuration"""
 
 import warnings
 
