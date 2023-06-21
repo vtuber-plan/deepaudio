@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vtbaudio"
+version = "0.0.1"
+description = "State-of-the-art Audio Machine Learning Models."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "httpx", "numpy", "pydantic", "requests",
+    "rich>=10.0.0", "shortuuid", "tokenizers>=0.12.1", "torch",
+    "tenacity>=8.2.2",
+]
+
+[project.optional-dependencies]
+dev = ["black==23.3.0", "pylint==2.8.2"]
+
+
+[project.urls]
+"Homepage" = "https://github.com/vtuber-plan/vtbaudio"
+"Bug Tracker" = "https://github.com/vtuber-plan/vtbaudio/issues"
+
+[tool.setuptools.packages.find]
+exclude = ["assets*", "benchmark*", "docs", "dist*", "playground*", "scripts*", "tests*"]
+
+[tool.wheel]
+exclude = ["assets*", "benchmark*", "docs", "dist*", "playground*", "scripts*", "tests*"]
