@@ -14,8 +14,8 @@ classifiers = [
 ]
 dependencies = [
     "httpx", "numpy", "pydantic", "requests",
-    "rich>=10.0.0", "shortuuid", "tokenizers>=0.12.1", "torch",
-    "tenacity>=8.2.2",
+    "rich>=10.0.0", "shortuuid", "torch", "torchaudio",
+    "tenacity>=8.2.2", "huggingface_hub"
 ]
 
 [project.optional-dependencies]
