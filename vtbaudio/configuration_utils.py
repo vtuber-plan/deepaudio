@@ -10,7 +10,7 @@ from . import __version__
 
 logger = logging.get_logger(__name__)
 
-class AudioModelConfig(PushToHubMixin):
+class PretrainedAudioConfig(PushToHubMixin):
     model_type: str = ""
     attribute_map: Dict[str, str] = {}
 
@@ -69,11 +69,11 @@ class AudioModelConfig(PushToHubMixin):
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
-class DiscriminatorConfig(AudioModelConfig):
+class DiscriminatorConfig(PretrainedAudioConfig):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-class VocoderConfig(AudioModelConfig):
+class VocoderConfig(PretrainedAudioConfig):
     def __init__(self, **kwargs) -> None:
         self.n_mel_channels = kwargs.pop("n_mel_channels", 80)
         self.mel_fmin = kwargs.pop("mel_fmin", 0.0)

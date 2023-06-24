@@ -2,7 +2,8 @@
 
 from functools import reduce
 import operator
-from typing import List, Union
+from typing import Iterable, List, Union
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -11,30 +12,47 @@ from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 from ....utils.model_utils import init_weights, get_padding
 
-LRELU_SLOPE = 0.1
-
 class HifiGANResBlock(torch.nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5, 7)):
+    def __init__(self, channels: int, kernel_size: int=3, dilation: Iterable[int]=(1, 3, 5, 7), lrelu_slope: float=0.1):
         super(HifiGANResBlock, self).__init__()
+        self.lrelu_slope = lrelu_slope
         self.convs1 = nn.ModuleList()
         for dilation_size in dilation:
-            conv_kernel = weight_norm(Conv1d(channels, channels, kernel_size, 1, dilation=dilation_size, padding=get_padding(kernel_size, dilation_size)))
+            conv_kernel = weight_norm(
+                Conv1d(
+                    in_channels=channels,
+                    out_channels=channels,
+                    kernel_size=kernel_size,
+                    stride=1,
+                    dilation=dilation_size,
+                    padding=get_padding(kernel_size, dilation_size)
+                )
+            )
             self.convs1.append(conv_kernel)
         self.convs1.apply(init_weights)
 
         self.convs2 = nn.ModuleList()
         for dilation_size in dilation:
-            conv_kernel = weight_norm(Conv1d(channels, channels, kernel_size, 1, dilation=1, padding=get_padding(kernel_size, 1)))
+            conv_kernel = weight_norm(
+                Conv1d(
+                    in_channels=channels,
+                    out_channels=channels,
+                    kernel_size=kernel_size,
+                    stride=1,
+                    dilation=1,
+                    padding=get_padding(kernel_size, 1)
+                )
+            )
             self.convs2.append(conv_kernel)
         self.convs2.apply(init_weights)
 
     def forward(self, x, x_mask=None):
         for c1, c2 in zip(self.convs1, self.convs2):
-            xt = F.leaky_relu(x, LRELU_SLOPE)
+            xt = F.leaky_relu(x, self.lrelu_slope)
             if x_mask is not None:
                 xt = xt * x_mask
             xt = c1(xt)
-            xt = F.leaky_relu(xt, LRELU_SLOPE)
+            xt = F.leaky_relu(xt, self.lrelu_slope)
             if x_mask is not None:
                 xt = xt * x_mask
             xt = c2(xt)
@@ -63,39 +81,44 @@ class HifiGANGenerator(torch.nn.Module):
         self.num_kernels = len(resblock_kernel_sizes)
         self.num_upsamples = len(upsample_rates)
         self.n_head = 4
+        self.lrelu_slope = 0.1
 
-        # self.transformer_pre_encoder_layer = nn.TransformerEncoderLayer(d_model=initial_channel, nhead=self.n_head, batch_first=True, activation="gelu")
-        # self.transformer_pre_encoder = nn.TransformerEncoder(self.transformer_pre_encoder_layer, num_layers=2)
-
-        self.conv_pre = Conv1d(in_channels=initial_channel, out_channels=upsample_initial_channel, kernel_size=pre_kernel_size, stride=1, padding=(pre_kernel_size-1)//2)
+        self.conv_pre = Conv1d(
+            in_channels=initial_channel,
+            out_channels=upsample_initial_channel,
+            kernel_size=pre_kernel_size,
+            stride=1,
+            padding=(pre_kernel_size-1)//2
+        )
 
         self.ups = nn.ModuleList()
         for i, (u, k, d) in enumerate(zip(upsample_rates, upsample_kernel_sizes, upsample_dilation_sizes)):
             self.ups.append(
-                ConvTranspose1d(in_channels=upsample_initial_channel//(2**i),
+                ConvTranspose1d(
+                    in_channels=upsample_initial_channel//(2**i),
                     out_channels=upsample_initial_channel//(2**(i+1)),
                     kernel_size=k,
                     stride=u,
                     padding=(((k-1)*d+1)-u)//2,
-                    dilation=d)
+                    dilation=d
+                )
             )
 
         self.resblocks = nn.ModuleList()
         for i in range(len(self.ups)):
             ch = upsample_initial_channel//(2**(i+1))
             for j, (k, d) in enumerate(zip(resblock_kernel_sizes, resblock_dilation_sizes)):
-                self.resblocks.append(ResBlock(channels=ch, kernel_size=k, dilation=d))
+                self.resblocks.append(HifiGANResBlock(channels=ch, kernel_size=k, dilation=d, lrelu_slope=self.lrelu_slope))
 
         self.conv_post = Conv1d(ch, 1, post_kernel_size, 1, padding=(post_kernel_size-1)//2, bias=False)
         # self.ups.apply(init_weights)
         self.conv_post.apply(init_weights)
 
     def forward(self, x):
-        # x = self.transformer_pre_encoder(x.transpose(1,2)).transpose(1,2)
         x = self.conv_pre(x)
         
         for i in range(self.num_upsamples):
-            x = F.leaky_relu(x, LRELU_SLOPE)
+            x = F.leaky_relu(x, self.lrelu_slope)
             up_x = self.ups[i](x)
             xs = None
             for j in range(self.num_kernels):
