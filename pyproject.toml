@@ -13,7 +13,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "httpx", "numpy", "pydantic", "requests",
+    "httpx", "numpy", "pydantic", "requests", "transformers",
     "rich>=10.0.0", "shortuuid", "torch", "torchaudio",
     "tenacity>=8.2.2", "huggingface_hub"
 ]
