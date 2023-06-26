@@ -6,7 +6,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from .configuration_utils import PretrainedAudioConfig
-from .utils.hub import PushToHubMixin
+from transformers.utils.hub import PushToHubMixin
 
 from transformers.modeling_utils import get_parameter_device, get_parameter_dtype
 

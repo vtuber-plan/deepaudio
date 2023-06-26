@@ -5,7 +5,8 @@ import copy
 import json
 import os
 from typing import Any, Dict, Union
-from .utils import PushToHubMixin, logging
+from transformers.utils.hub import PushToHubMixin
+from transformers.utils import logging
 from . import __version__
 
 logger = logging.get_logger(__name__)
