@@ -10,6 +10,10 @@ from torch.nn import functional as F
 
 from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
+
+from vtbaudio.modeling_utils import PreTrainedAudioModel
+from vtbaudio.models.vocoders.hifigan.configuration_hifigan import HifiGANConfig
+
 from ....utils.model_utils import init_weights, get_padding
 
 class HifiGANResBlock(torch.nn.Module):
@@ -67,17 +71,20 @@ class HifiGANResBlock(torch.nn.Module):
         for l in self.convs2:
             remove_weight_norm(l)
 
-class HifiGANGenerator(torch.nn.Module):
-    def __init__(self, initial_channel: int,
-                    resblock_kernel_sizes: List[int],
-                    resblock_dilation_sizes: List[int],
-                    upsample_rates: List[int],
-                    upsample_initial_channel: int,
-                    upsample_kernel_sizes: List[int],
-                    upsample_dilation_sizes: List[int],
-                    pre_kernel_size: int=11,
-                    post_kernel_size: int=11):
+class HifiGANGenerator(PreTrainedAudioModel):
+    def __init__(self, config: HifiGANConfig):
         super(HifiGANGenerator, self).__init__()
+
+        initial_channel = config.inter_channels
+        resblock_kernel_sizes = config.resblock_kernel_sizes
+        resblock_dilation_sizes = config.resblock_dilation_sizes
+        upsample_rates = config.upsample_rates
+        upsample_initial_channel = config.upsample_initial_channel
+        upsample_kernel_sizes = config.upsample_kernel_sizes
+        upsample_dilation_sizes = config.upsample_dilation_sizes
+        pre_kernel_size = config.pre_kernel_size
+        post_kernel_size = config.post_kernel_size
+
         self.num_kernels = len(resblock_kernel_sizes)
         self.num_upsamples = len(upsample_rates)
         self.n_head = 4

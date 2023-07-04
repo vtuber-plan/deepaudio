@@ -4,6 +4,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from vtbaudio.modeling_utils import PreTrainedAudioModel
+
 class MelGANResStack(nn.Module):
     def __init__(self, channel):
         super(MelGANResStack, self).__init__()
@@ -35,7 +37,7 @@ class MelGANResStack(nn.Module):
             nn.utils.remove_weight_norm(block[4])
             nn.utils.remove_weight_norm(shortcut)
 
-class MelGANGenerator(nn.Module):
+class MelGANGenerator(PreTrainedAudioModel):
     def __init__(self, mel_channel):
         super(MelGANGenerator, self).__init__()
         self.mel_channel = mel_channel
