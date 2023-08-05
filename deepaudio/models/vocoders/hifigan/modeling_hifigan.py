@@ -11,8 +11,8 @@ from torch.nn import functional as F
 from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 
-from vtbaudio.modeling_utils import PreTrainedAudioModel
-from vtbaudio.models.vocoders.hifigan.configuration_hifigan import HifiGANConfig
+from deepaudio.modeling_utils import PreTrainedAudioModel
+from deepaudio.models.vocoders.hifigan.configuration_hifigan import HifiGANConfig
 
 from ....utils.model_utils import init_weights, get_padding
 

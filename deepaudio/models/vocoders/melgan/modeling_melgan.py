@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from vtbaudio.modeling_utils import PreTrainedAudioModel
+from deepaudio.modeling_utils import PreTrainedAudioModel
 
 class MelGANResStack(nn.Module):
     def __init__(self, channel):

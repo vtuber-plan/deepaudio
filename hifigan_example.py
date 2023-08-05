@@ -1,7 +1,7 @@
-import vtbaudio
-from vtbaudio.models.vocoders.hifigan.configuration_hifigan import HifiGANConfig
-from vtbaudio.models.vocoders.hifigan.modeling_hifigan import HifiGAN, HifiGANPipeline
-from vtbaudio.pipelines import MelPipeline
+import deepaudio
+from deepaudio.models.vocoders.hifigan.configuration_hifigan import HifiGANConfig
+from deepaudio.models.vocoders.hifigan.modeling_hifigan import HifiGAN, HifiGANPipeline
+from deepaudio.pipelines import MelPipeline
 
 hifigan_48k = HifiGAN.from_pretrained("vtb-plan/hifigan-48k")
 

@@ -52,8 +52,8 @@ class PretrainedAudioConfig(PushToHubMixin):
         if hasattr(self.__class__, "model_type"):
             output["model_type"] = self.__class__.model_type
 
-        # vtbaudio version when serializing the model
-        output["vtbaudio_version"] = __version__
+        # deepaudio version when serializing the model
+        output["deepaudio_version"] = __version__
 
         self.dict_torch_dtype_to_str(output)
 
