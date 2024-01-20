@@ -1,9 +1,9 @@
 import deepaudio
 from deepaudio.models.vocoders.hifigan.configuration_hifigan import HifiGANConfig
-from deepaudio.models.vocoders.hifigan.modeling_hifigan import HifiGAN, HifiGANPipeline
+from deepaudio.models.vocoders.hifigan.modeling_hifigan import HifiGANGenerator
 from deepaudio.pipelines import MelPipeline
 
-hifigan_48k = HifiGAN.from_pretrained("vtb-plan/hifigan-48k")
+hifigan_48k = HifiGANGenerator.from_pretrained("vtb-plan/hifigan-48k")
 
 import torchaudio
 import torchaudio.transforms as T

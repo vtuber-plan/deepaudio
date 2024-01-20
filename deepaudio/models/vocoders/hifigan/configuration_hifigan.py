@@ -2,13 +2,13 @@
 
 import warnings
 
-from ....configuration_utils import VocoderConfig
+from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-class HifiGANConfig(VocoderConfig):
+class HifiGANConfig(PretrainedConfig):
     model_type = "hifigan"
     attribute_map = {
         "inter_channels": "inter_channels",
