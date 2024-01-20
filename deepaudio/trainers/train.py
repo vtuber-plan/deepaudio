@@ -10,7 +10,7 @@ from deepaudio.light_modules.strategies.strategy_utils import setup_strategy_ddp
 
 from deepaudio.light_modules.utils.checkpoints import get_lastest_checkpoint
 from deepaudio.utils.hparams import HParams
-from deepaudio.data.collators import DataCollatorWithPadding
+
 
 from deepaudio.utils.utils import get_optimizer_grouped_parameters, parse_dtype_str
 os.environ['TRANSFORMERS_NO_ADVISORY_WARNINGS'] = 'true'
@@ -33,8 +33,8 @@ from lightning.pytorch.profilers import SimpleProfiler, AdvancedProfiler
 import lightning_fabric
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Pretrain a transformers model on a causal language modeling task")
-    parser.add_argument('--hparams', type=str, default="hparams/hparams_chat_deepseek_7b_lora.json", help='The hparam file of training')
+    parser = argparse.ArgumentParser(description="Pretrain a deep learning model on a audio task")
+    parser.add_argument('--hparams', type=str, default="hparams/hparams_hifigan_48k.json", help='The hparam file of training')
     parser.add_argument('--accelerator', type=str, default="gpu", help='training device')
     parser.add_argument('--device', type=str, default="", help='training device ids')
     parser.add_argument('--seed', type=int, default=43, help='model seed')
@@ -42,7 +42,7 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-from peft import LoftQConfig, LoraConfig, get_peft_model, PeftModel
+
 def setup_lora(
         base_model,
         r: int=128,
@@ -51,7 +51,8 @@ def setup_lora(
         lora_dropout: float=0.0,
         fan_in_fan_out: bool=False,
         bias: str="none"
-    ) -> PeftModel:
+    ) -> "PeftModel":
+    from peft import LoftQConfig, LoraConfig, get_peft_model, PeftModel
     # loftq_config = LoftQConfig(loftq_bits=4, ...)           # set 4bit quantization
     lora_config = LoraConfig(
         r=r,
@@ -64,7 +65,7 @@ def setup_lora(
     model = get_peft_model(base_model, lora_config)
     return model
 
-def train(create_dataset, lightning_module_class):
+def train():
     torch.autograd.set_detect_anomaly(True)
     args = parse_args()
     hparams = HParams.from_json_file(args.hparams)
@@ -88,14 +89,7 @@ def train(create_dataset, lightning_module_class):
     if torch_dtype == torch.float16 and args.accelerator in ["cpu"]:
         raise RuntimeError("Models in float16 cannot run with the accelerator CPU.")
     
-    model = create_hf_model(
-        model_class=AutoModelForCausalLM,
-        model_name_or_path=hparams.model_name_or_path,
-        tokenizer=tokenizer,
-        dtype=torch_dtype,
-        disable_dropout=hparams.disable_dropout,
-        use_flash_atten=hparams.get("flash_attention_2", False),
-    )
+    model = HifiGan.from_pretrained()
 
     # Setup LORA
     if "lora" in hparams:

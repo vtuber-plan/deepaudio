@@ -1,7 +1,7 @@
 from deepaudio.trainers.train import train
 
 def vocoder_pretrain():
-    train(create_pretrain_dataset, PretrainLanguageModel)
+    train()
 
 if __name__ == "__main__":
     vocoder_pretrain()

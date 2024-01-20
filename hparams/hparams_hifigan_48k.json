@@ -1,0 +1,36 @@
+{
+    "conv_format": "baichuan2",
+    "data_path": [
+        "Vtuber-plan/sharegpt-cleaned"
+    ],
+    "data_output_path": "./tmp/data_files/",
+    "model_name_or_path": "baichuan-inc/Baichuan2-7B-Base",
+    "flash_attention_2": false,
+    "per_device_train_batch_size": 8,
+    "per_device_eval_batch_size": 8,
+    "accumulate_grad_batches": 8,
+    "max_seq_len": 2048,
+    "checkpoint_every_n_train_steps": 100,
+    "log_every_n_steps": 1,
+    "val_check_interval": 0.25,
+    "limit_val_batches": 0.1,
+    "learning_rate": 8e-6,
+    "betas": [0.9, 0.95],
+    "eps": 1e-6,
+    "lr_decay": 0.999875,
+    "lr_scheduler_type": "cosine",
+    "num_warmup_steps": 100,
+    "max_epochs": 300,
+    "disable_dropout": true,
+    "model_torch_dtype": "auto",
+    "bf16": true,
+    "gradient_checkpointing": true,
+    "weight_decay": 0.0,
+    "gradient_clip_algorithm": "norm",
+    "gradient_clip_val": 1.0,
+    "strategy": null,
+    "lora": {
+        "r": 128,
+        "target_modules": ["W_pack"]
+    }
+}

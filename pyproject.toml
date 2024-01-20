@@ -7,12 +7,12 @@ name = "deepaudio"
 version = "0.0.1"
 description = "State-of-the-art Audio Machine Learning Models."
 authors = [
-    "XiaHan <jstzwj@aliyun.com>",
-    "FrostMiKu <i@frostmiku.com>",
+    {name="XiaHan", email="jstzwj@aliyun.com"},
+    {name="FrostMiKu", email="i@frostmiku.com"}
 ]
 maintainers = [
-    "XiaHan <jstzwj@aliyun.com>",
-    "FrostMiKu <i@frostmiku.com>",
+    {name="XiaHan", email="jstzwj@aliyun.com"},
+    {name="FrostMiKu", email="i@frostmiku.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.8"
