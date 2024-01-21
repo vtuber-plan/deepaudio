@@ -1,7 +1,5 @@
-""" HifiGAN configuration"""
-
-import warnings
-
+# coding=utf-8
+""" MelGAN configuration"""
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
@@ -13,9 +11,15 @@ class MelGANConfig(PretrainedConfig):
 
     def __init__(
         self,
-        inter_channels: int,
+        n_mel=80,
+        ngf=32,
+        n_residual_layers=3,
+        ratios=[8, 8, 2, 2],
         **kwargs
     ):
-        """Constructs HifiGANConfig."""
-        self.inter_channels = inter_channels
+        """Constructs MelGANConfig."""
+        self.n_mel = n_mel
+        self.ngf = ngf
+        self.n_residual_layers = n_residual_layers
+        self.ratios = ratios
         super().__init__(**kwargs)

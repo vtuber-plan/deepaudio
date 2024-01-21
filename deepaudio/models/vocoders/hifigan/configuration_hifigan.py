@@ -1,7 +1,5 @@
+# coding=utf-8
 """ HifiGAN configuration"""
-
-import warnings
-
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 

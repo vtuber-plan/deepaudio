@@ -1,7 +1,8 @@
+# coding=utf-8
+from transformers.utils import logging
 
+logger = logging.get_logger(__name__)
 
-from functools import reduce
-import operator
 from typing import Iterable, List, Union
 
 import torch
