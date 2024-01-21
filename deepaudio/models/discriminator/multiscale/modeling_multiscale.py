@@ -11,16 +11,15 @@ from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 from transformers import PreTrainedModel
 from deepaudio.models.discriminator.multiscale.configuration_multiscale import MultiScaleConfig
 
-LRELU_SLOPE = 0.1
-
 class MultiScalePreTrainedModel(PreTrainedModel):
     config_class = MultiScaleConfig
-    base_model_prefix = "multips"
+    base_model_prefix = "multiscale"
     supports_gradient_checkpointing = False
 
 class DiscriminatorS(torch.nn.Module):
-    def __init__(self, use_spectral_norm=False):
+    def __init__(self, use_spectral_norm=False, lrelu_slope: float=0.1):
         super(DiscriminatorS, self).__init__()
+        self.lrelu_slope = lrelu_slope
         norm_f = weight_norm if use_spectral_norm == False else spectral_norm
         self.convs = nn.ModuleList([
             norm_f(Conv1d(1, 16, 15, 1, padding=7)),
@@ -38,7 +37,7 @@ class DiscriminatorS(torch.nn.Module):
 
         for l in self.convs:
             x = l(x)
-            x = F.leaky_relu(x, LRELU_SLOPE)
+            x = F.leaky_relu(x, self.lrelu_slope)
             fmap.append(x)
         x = self.conv_post(x)
         fmap.append(x)

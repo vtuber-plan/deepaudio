@@ -13,7 +13,6 @@ from deepaudio.models.discriminator.multiperiod.configuration_multiperiod import
 
 from ....utils.model_utils import init_weights, get_padding
 
-LRELU_SLOPE = 0.1
 
 class MultiPeriodPreTrainedModel(PreTrainedModel):
     config_class = MultiPeriodConfig
@@ -21,10 +20,11 @@ class MultiPeriodPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
 
 class DiscriminatorP(torch.nn.Module):
-    def __init__(self, period, kernel_size=5, stride=3, use_spectral_norm=False):
+    def __init__(self, period, kernel_size=5, stride=3, use_spectral_norm=False, lrelu_slope: float=0.1):
         super(DiscriminatorP, self).__init__()
         self.period = period
         self.use_spectral_norm = use_spectral_norm
+        self.lrelu_slope = lrelu_slope
         norm_f = weight_norm if use_spectral_norm == False else spectral_norm
         self.convs = nn.ModuleList([
             norm_f(Conv2d(1, 32, (kernel_size, 1), (stride, 1), padding=(get_padding(kernel_size, 1), 0))),
@@ -50,7 +50,7 @@ class DiscriminatorP(torch.nn.Module):
 
         for l in self.convs:
             x = l(x)
-            x = F.leaky_relu(x, LRELU_SLOPE)
+            x = F.leaky_relu(x, self.lrelu_slope)
             fmap.append(x)
         x = self.conv_post(x)
         fmap.append(x)
