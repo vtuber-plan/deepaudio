@@ -1,4 +1,4 @@
-""" Multi Period Scale Discriminator configuration"""
+""" Multi Scale Discriminator configuration"""
 
 import warnings
 
@@ -8,17 +8,15 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
-class MultiPSConfig(PretrainedConfig):
-    model_type = "multips"
+class MultiScaleConfig(PretrainedConfig):
+    model_type = "multiscale"
     attribute_map = {}
 
     def __init__(
         self,
-        periods=[2, 3, 5, 7, 11, 17, 23, 37],
         use_spectral_norm=False,
         **kwargs
     ):
-        """Constructs MultiPSConfig."""
-        self.periods = periods
+        """Constructs MultiScaleConfig."""
         self.use_spectral_norm = use_spectral_norm
         super().__init__(**kwargs)
