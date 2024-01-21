@@ -16,10 +16,9 @@ from ....utils.model_utils import init_weights, get_padding
 LRELU_SLOPE = 0.1
 
 class MultiPeriodPreTrainedModel(PreTrainedModel):
-    config_class = MultiPSConfig
+    config_class = MultiPeriodConfig
     base_model_prefix = "multiperiod"
     supports_gradient_checkpointing = False
-
 
 class DiscriminatorP(torch.nn.Module):
     def __init__(self, period, kernel_size=5, stride=3, use_spectral_norm=False):

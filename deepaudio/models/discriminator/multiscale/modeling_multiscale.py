@@ -11,8 +11,6 @@ from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
 from transformers import PreTrainedModel
 from deepaudio.models.discriminator.multiscale.configuration_multiscale import MultiScaleConfig
 
-from ....utils.model_utils import init_weights, get_padding
-
 LRELU_SLOPE = 0.1
 
 class MultiScalePreTrainedModel(PreTrainedModel):

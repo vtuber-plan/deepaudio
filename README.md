@@ -10,6 +10,35 @@ Given the success of Transformers in the field of NLP and its provision of conve
 * Content Encoder
 * Speaker Encoder
 
+
+## Installation
+
+### Method 1: With pip
+
+```bash
+pip install deepaudio
+```
+
+or:
+
+```bash
+pip install git+https://github.com/vtuber-plan/deepaudio.git 
+```
+
+### Method 2: From source
+
+1. Clone this repository
+```bash
+git clone https://github.com/vtuber-plan/deepaudio.git
+cd deepaudio
+```
+
+2. Install the Package
+```bash
+pip install --upgrade pip
+pip install .
+```
+
 ## Usage
 
 Use HifiGAN to convert mel to wav:
@@ -33,3 +62,6 @@ mel = audio_pipeline(wav)
 out = hifigan_48k(mel)
 
 ```
+
+## License
+deepaudio is under the MIT License.
