@@ -4,8 +4,8 @@ Advanced machine learning speech models based on PyTorch.
 Given the success of Transformers in the field of NLP and its provision of convenient APIs and tools for easily downloading and training state-of-the-art pre-trained models, deepaudio serves as a complementary addition in the domain of speech. It provides a similar interface and can be published on the Hugging Face Hub. The implemented model types in deepaudio include:
 
 * ASR (Automatic Speech Recognition)
-* TTS (Text-to-Speech)
-* Vocoder
+* TTS (Text-to-Speech): VITS
+* Vocoder: HifiGAN, MelGAN
 * F0
 * Content Encoder
 * Speaker Encoder
