@@ -1,0 +1,1 @@
+python -m deepaudio.trainers.vocoders.train --hparams hparams/vocoders/hifigan_16k.json
