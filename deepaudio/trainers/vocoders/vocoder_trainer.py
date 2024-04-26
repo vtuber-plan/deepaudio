@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import accelerate
 
 from deepaudio.datasets.vocoders.vocoder_dataset import VocoderConcatDataset
 from deepaudio.samplers.vocoders.vocoder_sampler import build_samplers
@@ -14,6 +15,26 @@ from deepaudio.samplers.vocoders.vocoder_sampler import build_samplers
 class VocoderTrainer:
     def __init__(self):
         super().__init__()
+    
+    def _init_accelerator(self):
+        """Initialize the accelerator components."""
+        self.exp_dir = os.path.join(
+            os.path.abspath(self.cfg.log_dir), self.args.exp_name
+        )
+        project_config = accelerate.utils.ProjectConfiguration(
+            project_dir=self.exp_dir, logging_dir=os.path.join(self.exp_dir, "log")
+        )
+        self.accelerator = accelerate.Accelerator(
+            gradient_accumulation_steps=self.cfg.train.gradient_accumulation_step,
+            log_with=self.cfg.train.tracker,
+            project_config=project_config,
+        )
+        if self.accelerator.is_main_process:
+            os.makedirs(project_config.project_dir, exist_ok=True)
+            os.makedirs(project_config.logging_dir, exist_ok=True)
+        with self.accelerator.main_process_first():
+            self.accelerator.init_trackers(self.args.exp_name)
+
 
     def _build_dataset(self):
         pass

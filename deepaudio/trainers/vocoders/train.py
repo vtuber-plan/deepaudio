@@ -21,7 +21,7 @@ def build_trainer(args: argparse.Namespace, hparams: HParams) -> VocoderTrainer:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("Train a vocoder model")
     parser.add_argument("--hparams", default="hparams.json", help="json files for configurations", required=True)
-    parser.add_argument("--exp_name", type=str, default="exp_name", help="experiment name")
+    parser.add_argument("--exp", type=str, default="experiment", help="experiment name")
     parser.add_argument("--checkpoint", type=str, help="checkpoint to resume")
     parser.add_argument("--log_level", default="warning", help="logging level")
     args = parser.parse_args()

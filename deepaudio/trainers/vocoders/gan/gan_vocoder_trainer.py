@@ -774,7 +774,7 @@ class GANVocoderTrainer(VocoderTrainer):
                 imag_pred,
                 audio_pred,
             ) = self.generator.forward(mel_input)
-            from utils.mel import amplitude_phase_spectrum
+            from deepaudio.utils.mel_utils import amplitude_phase_spectrum
 
             _, _, rea_pred_final, imag_pred_final = amplitude_phase_spectrum(
                 audio_pred.squeeze(1), self.cfg.preprocess
@@ -937,7 +937,7 @@ class GANVocoderTrainer(VocoderTrainer):
                 imag_pred,
                 audio_pred,
             ) = self.generator.forward(mel_input)
-            from utils.mel import amplitude_phase_spectrum
+            from deepaudio.utils.mel_utils import amplitude_phase_spectrum
 
             _, _, rea_pred_final, imag_pred_final = amplitude_phase_spectrum(
                 audio_pred.squeeze(1), self.cfg.preprocess
