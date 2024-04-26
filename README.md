@@ -64,4 +64,10 @@ out = hifigan_48k(mel)
 ```
 
 ## License
-deepaudio is under the MIT License.
+deepaudio is under the MIT License. It is free for both research and commercial use cases.
+
+## Acknowledgement
+
+- [Amphion](https://github.com/open-mmlab/Amphion)
+- [HiFi-GAN](https://github.com/jik876/hifi-gan)
+

@@ -33,6 +33,7 @@ from deepaudio.datasets.vocoders.gan.gan_vocoder_dataset import (
     GANVocoderDataset,
     GANVocoderCollator,
 )
+from deepaudio.utils.mel_utils import extract_mel_features
 
 
 # from deepaudio.models.vocoders.gan.gan_vocoder_inference import vocoder_inference
