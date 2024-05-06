@@ -1,3 +1,10 @@
 {
-    "model_type": "GANVocoder"
+    "model_type": "GANVocoder",
+    "train": {
+        "random_seed": 43,
+        "save_checkpoint_stride": [20],
+        "gradient_accumulation_step": 1,
+        "tracker": "tensorboard",
+        "max_epoch": 100
+    }
 }
