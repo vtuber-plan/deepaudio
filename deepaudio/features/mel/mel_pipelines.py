@@ -1,0 +1,32 @@
+
+
+import torch
+import torchaudio
+import torchaudio.transforms as T
+
+from deepaudio.features.mel.mel_params import MelParams
+
+class MelPipeline(torch.nn.Module):
+    def __init__(self, params: MelParams):
+        super().__init__()
+        self.params = params
+
+        pad = int((params.n_fft-params.hop_length)/2)
+        self.spec = T.Spectrogram(
+            n_fft=params.n_fft, 
+            win_length=params.win_length, 
+            hop_length=params.hop_length,
+            pad=pad,
+            power=None,
+            center=False,
+            pad_mode='reflect',
+            normalized=False,
+            onesided=True
+        )
+        self.mel_scale = T.MelScale(n_mels=params.mel_channels, sample_rate=params.sampling_rate, n_stft=params.n_fft // 2 + 1)
+
+    def forward(self, waveform: torch.Tensor) -> torch.Tensor:
+        spec = self.spec(waveform)
+        spec = torch.sqrt(spec.real.pow(2) + spec.imag.pow(2) + 1e-6)
+        mel = self.mel_scale(spec)
+        return mel
