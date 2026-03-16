@@ -31,6 +31,9 @@ class DataConfig:
     n_fft: int = 1024
     n_mel: int = 80
     hop_length: int = 256
+    win_length: int = 1024
+    f_min: float = 0.0
+    f_max: float = 12000.0
 
 
 @dataclass

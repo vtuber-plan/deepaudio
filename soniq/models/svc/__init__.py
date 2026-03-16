@@ -1,3 +1,8 @@
 # coding=utf-8
-"""Soniq module."""
+"""Singing voice conversion models."""
 
+from soniq.models.svc.base import BaseSVCModel
+
+__all__ = [
+    "BaseSVCModel",
+]

@@ -153,14 +153,34 @@ class FabricEngine:
 
             # Handle multiple optimizers (e.g., GAN training)
             if isinstance(optimizer, dict):
-                for opt_idx, (opt_name, opt) in enumerate(optimizer.items()):
-                    step_output = system.training_step(batch, batch_idx, optimizer_idx=opt_idx)
-                    self.fabric.backward(step_output.loss)
-                    if self.gradient_clip_val:
-                        self.fabric.clip_gradients(system, opt, clip_val=self.gradient_clip_val)
-                    opt.step()
+                # For GAN training with AMP, we need to carefully handle gradient scaling
+                # Zero all gradients first
+                for opt_name, opt in optimizer.items():
                     opt.zero_grad()
-                    self._log_gan_metrics(step_output, opt_name)
+
+                # Discriminator step (optimizer_idx=0)
+                step_output_d = system.training_step(batch, batch_idx, optimizer_idx=0)
+                self.fabric.backward(step_output_d.loss)
+                # Clip gradients without calling unscale (already done by Fabric.backward)
+                if self.gradient_clip_val:
+                    torch.nn.utils.clip_grad_norm_(
+                        system.parameters(),
+                        self.gradient_clip_val
+                    )
+                optimizer["discriminator"].step()
+                self._log_gan_metrics(step_output_d, "discriminator")
+
+                # Generator step (optimizer_idx=1)
+                step_output_g = system.training_step(batch, batch_idx, optimizer_idx=1)
+                self.fabric.backward(step_output_g.loss)
+                # Clip gradients without calling unscale (already done by Fabric.backward)
+                if self.gradient_clip_val:
+                    torch.nn.utils.clip_grad_norm_(
+                        system.parameters(),
+                        self.gradient_clip_val
+                    )
+                optimizer["generator"].step()
+                self._log_gan_metrics(step_output_g, "generator")
             else:
                 step_output = system.training_step(batch, batch_idx)
                 self.fabric.backward(step_output.loss)

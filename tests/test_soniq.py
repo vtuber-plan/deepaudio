@@ -92,7 +92,7 @@ def test_model_creation():
     mel = torch.randn(1, 128, 100)  # n_mel should match inter_channels
     with torch.no_grad():
         output = model(mel)
-    print(f"  ✓ Forward pass: {mel.shape} -> {output.shape}")
+    print(f"  ✓ Forward pass: {mel.shape} -> {output.waveform.shape}")
 
     return True
 
