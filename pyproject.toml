@@ -3,16 +3,14 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "deepaudio"
-version = "0.0.1"
-description = "State-of-the-art Audio Machine Learning Models."
+name = "soniq"
+version = "0.1.0"
+description = "State-of-the-art Audio Machine Learning Library with Transformers-style API."
 authors = [
-    {name="XiaHan", email="jstzwj@aliyun.com"},
-    {name="FrostMiKu", email="i@frostmiku.com"}
+    {name="Soniq Team", email="jstzwj@aliyun.com"}
 ]
 maintainers = [
-    {name="XiaHan", email="jstzwj@aliyun.com"},
-    {name="FrostMiKu", email="i@frostmiku.com"}
+    {name="Soniq Team", email="jstzwj@aliyun.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.8"
@@ -21,9 +19,10 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "httpx", "numpy", "pydantic", "requests", "transformers",
+    "httpx", "numpy", "pydantic", "requests", "transformers>=4.38.0",
     "rich>=10.0.0", "shortuuid", "torch", "torchaudio",
-    "tenacity>=8.2.2", "huggingface_hub"
+    "tenacity>=8.2.2", "huggingface_hub", "lightning>=2.0.0",
+    "librosa", "pyyaml"
 ]
 
 [project.optional-dependencies]
@@ -31,10 +30,17 @@ dev = ["black==23.3.0", "pylint==2.8.2"]
 
 
 [project.urls]
-"Homepage" = "https://github.com/vtuber-plan/deepaudio"
-"Bug Tracker" = "https://github.com/vtuber-plan/deepaudio/issues"
+"Homepage" = "https://github.com/vtuber-plan/soniq"
+"Bug Tracker" = "https://github.com/vtuber-plan/soniq/issues"
+"Documentation" = "https://github.com/vtuber-plan/soniq/tree/main/docs"
+
+[project.scripts]
+soniq = "soniq.hub_cli:main"
+soniq-hub = "soniq.hub_cli:main"
 
 [tool.setuptools.packages.find]
+where = ["."]
+include = ["soniq*"]
 exclude = ["assets*", "benchmark*", "docs", "dist*", "playground*", "scripts*", "tests*"]
 
 [tool.wheel]

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "audio_000",
+    "audio_path": "data/test_audio/audio_000.wav",
+    "duration": 1.0,
+    "speaker": "spk_001"
+  },
+  {
+    "id": "audio_001",
+    "audio_path": "data/test_audio/audio_001.wav",
+    "duration": 1.0,
+    "speaker": "spk_001"
+  },
+  {
+    "id": "audio_002",
+    "audio_path": "data/test_audio/audio_002.wav",
+    "duration": 1.0,
+    "speaker": "spk_001"
+  },
+  {
+    "id": "audio_003",
+    "audio_path": "data/test_audio/audio_003.wav",
+    "duration": 1.0,
+    "speaker": "spk_001"
+  },
+  {
+    "id": "audio_004",
+    "audio_path": "data/test_audio/audio_004.wav",
+    "duration": 1.0,
+    "speaker": "spk_001"
+  },
+  {
+    "id": "audio_005",
+    "audio_path": "data/test_audio/audio_005.wav",
+    "duration": 1.0,
+    "speaker": "spk_002"
+  },
+  {
+    "id": "audio_006",
+    "audio_path": "data/test_audio/audio_006.wav",
+    "duration": 1.0,
+    "speaker": "spk_002"
+  },
+  {
+    "id": "audio_007",
+    "audio_path": "data/test_audio/audio_007.wav",
+    "duration": 1.0,
+    "speaker": "spk_002"
+  }
+]

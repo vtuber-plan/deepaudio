@@ -92,7 +92,7 @@ ipython_config.py
 #Pipfile.lock
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
+__packages__/
 
 # Celery stuff
 celerybeat-schedule
@@ -127,3 +127,72 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# =============================================================================
+# Deep Audio Project Specific
+# =============================================================================
+
+# Training outputs (but allow checkpoint directories to be tracked if needed)
+outputs/
+experiments/
+
+# Logs
+*.log
+logs/
+tensorboard/
+
+# Generated audio files (except test files)
+generated/
+
+# Data directory - ignore all but manifest files
+data/*
+!data/.gitkeep
+!data/train_manifest.json
+!data/val_manifest.json
+
+# Temporary files
+*.tmp
+.temp/
+tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter notebooks (optional - keep notebooks in notebooks/ directory)
+*.ipynb
+!notebooks/*.ipynb
+
+# Conda environment files
+environment.yml
+conda-lock.yml
+
+# Hugging Face cache
+.huggingface/
+transformers_cache/
+
+# Torch cache
+.torch/
+
+# Weights & Biases
+wandb/
+
+# MLflow
+mlruns/
+
+# Configuration backups
+config/experiments/*.bak
+config/experiments/*.backup
+
+# Large model checkpoints in outputs/ only
+outputs/*.pt
+outputs/*.pth
+outputs/*.bin
+
+# Test files exceptions
+!tests/*.wav
+!tests/*.pt

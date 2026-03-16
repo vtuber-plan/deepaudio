@@ -1,0 +1,52 @@
+# Default configuration for Soniq models
+
+{
+  "model": {
+    "name": "hifigan",
+    "inter_channels": 128,
+    "resblock_kernel_sizes": [3, 7, 11, 13],
+    "resblock_dilation_sizes": [1, 3, 5],
+    "upsample_rates": [8, 8, 4, 2],
+    "upsample_initial_channel": 512,
+    "upsample_kernel_sizes": [16, 16, 8, 4],
+    "upsample_dilation_sizes": [1, 1, 1, 1],
+    "pre_kernel_size": 13,
+    "post_kernel_size": 13,
+    "use_spectral_norm": false,
+    "lrelu_slope": 0.1
+  },
+  "training": {
+    "accelerator": "gpu",
+    "strategy": "ddp",
+    "devices": 1,
+    "precision": "16-mixed",
+    "max_epochs": 100,
+    "batch_size": 32,
+    "gradient_accumulation_steps": 1,
+    "gradient_clip_val": 1.0,
+    "optimizer": {
+      "type": "AdamW",
+      "lr": 0.0002,
+      "betas": [0.8, 0.99],
+      "eps": 1e-8
+    },
+    "scheduler": {
+      "type": "ExponentialLR",
+      "gamma": 0.999
+    }
+  },
+  "data": {
+    "sample_rate": 24000,
+    "n_fft": 1024,
+    "n_mel": 80,
+    "hop_length": 256,
+    "win_length": 1024,
+    "f_min": 0.0,
+    "f_max": 12000.0
+  },
+  "logging": {
+    "loggers": ["tensorboard"],
+    "save_dir": "./logs",
+    "save_interval": 1000
+  }
+}

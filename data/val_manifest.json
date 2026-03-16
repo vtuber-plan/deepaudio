@@ -1,0 +1,14 @@
+[
+  {
+    "id": "audio_008",
+    "audio_path": "data/test_audio/audio_008.wav",
+    "duration": 1.0,
+    "speaker": "spk_002"
+  },
+  {
+    "id": "audio_009",
+    "audio_path": "data/test_audio/audio_009.wav",
+    "duration": 1.0,
+    "speaker": "spk_002"
+  }
+]

@@ -1,0 +1,25 @@
+# Default configuration for Soniq
+
+{
+  "model": {
+    "name": "default",
+    "type": "vocoder"
+  },
+  "training": {
+    "accelerator": "auto",
+    "strategy": "auto",
+    "devices": 1,
+    "precision": "32-true",
+    "max_epochs": 100,
+    "batch_size": 32,
+    "gradient_accumulation_steps": 1,
+    "gradient_clip_val": null,
+    "loggers": ["tensorboard"],
+    "save_dir": "./logs"
+  },
+  "data": {
+    "sample_rate": 24000,
+    "num_workers": 4,
+    "pin_memory": true
+  }
+}
