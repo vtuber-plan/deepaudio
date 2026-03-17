@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 """
-Training script for Vocoder models.
+Training script for Vocoder models using the unified Trainer.
 
 Usage:
     python -m bins.train_vocoder --config config/experiments/hifigan_train.json
@@ -20,10 +20,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from soniq.config import ExperimentConfig
 from soniq.models.vocoders.hifigan import HifiGAN, HifiGANConfig
 from soniq.models.vocoders.vocos import Vocos, VocosConfig as VocosModelConfig
-from soniq.tasks.vocoder.datasets import VocoderDataset, VocoderCollator
-from soniq.tasks.vocoder.system import VocoderTaskSystem, VocoderConfig
-from soniq.tasks.vocoder.vocos_system import VocosTaskSystem, VocosConfig as VocosTrainConfig
-from soniq.runtime import FabricTrainer
+from soniq.training import (
+    Trainer,
+    VocoderDataset,
+    VocoderCollator,
+    VocoderTaskSystem,
+    VocoderConfig,
+    VocosTaskSystem,
+    VocosConfig as VocosTrainConfig,
+)
 
 
 def parse_args():
@@ -32,6 +37,8 @@ def parse_args():
     parser.add_argument("--exp-name", type=str, default=None, help="Experiment name")
     parser.add_argument("--output-dir", type=str, default=None, help="Output directory")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
+    parser.add_argument("--engine", type=str, default="accelerate", choices=["accelerate", "fabric"],
+                        help="Training engine to use")
     return parser.parse_args()
 
 
@@ -150,25 +157,19 @@ def main():
         pin_memory=getattr(experiment_config.data, 'pin_memory', False),
     )
 
-    # Create trainer
-    trainer = FabricTrainer(
-        accelerator=experiment_config.accelerator,
-        devices=experiment_config.devices,
-        precision=experiment_config.precision,
+    # Create unified trainer
+    trainer = Trainer(
+        engine=args.engine,
+        run_path=exp_dir,
         max_epochs=experiment_config.train.max_epochs,
+        max_steps=getattr(experiment_config.train, 'max_steps', None),
         gradient_accumulation_steps=getattr(experiment_config.train, 'gradient_accumulation_steps', 1),
         gradient_clip_val=experiment_config.train.gradient_clip_val,
-        default_root_dir=exp_dir,
         seed=experiment_config.seed,
     )
 
-    # Create optimizers
-    optimizers = system.configure_optimizers()
-
     print(f"Starting training...")
-    print(f"  Accelerator: {experiment_config.accelerator}")
-    print(f"  Devices: {experiment_config.devices}")
-    print(f"  Precision: {experiment_config.precision}")
+    print(f"  Engine: {args.engine}")
     print(f"  Batch size: {experiment_config.train.batch_size}")
     print(f"  Max epochs: {experiment_config.train.max_epochs}")
 
@@ -177,7 +178,6 @@ def main():
         system=system,
         train_dataloader=train_loader,
         val_dataloader=val_loader,
-        optimizers=optimizers,
         resume_from_checkpoint=args.resume,
     )
 

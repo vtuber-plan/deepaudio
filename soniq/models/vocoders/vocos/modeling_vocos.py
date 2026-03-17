@@ -1,11 +1,13 @@
 # coding=utf-8
 """Vocos vocoder - Modern efficient vocoder based on ConvNeXt + ISTFT."""
 
-from typing import Optional, Tuple
-import math
+from typing import Optional, Dict, Any
 import torch
 from torch import nn
 from torch.nn import functional as F
+from transformers import PreTrainedModel
+
+from soniq.models.vocoders.vocos.configuration_vocos import VocosConfig
 
 
 class ISTFT(nn.Module):
@@ -403,80 +405,85 @@ class VocosBackbone(nn.Module):
         return x
 
 
-class Vocos(nn.Module):
+class Vocos(PreTrainedModel):
     """
     Vocos vocoder.
 
     A modern efficient vocoder based on ConvNeXt backbone and ISTFT head.
 
-    Args:
-        input_channels: Input mel channels (default: 128)
-        dim: Hidden dimension (default: 384)
-        intermediate_dim: ConvNeXt intermediate dim (default: 1152)
-        num_layers: Number of ConvNeXt blocks (default: 8)
-        n_fft: FFT size (default: 800)
-        hop_size: Hop length (default: 200)
-        padding: Padding type ("same" or "center")
-        adanorm_num_embeddings: If > 0, use AdaLayerNorm
-
     Example:
         ```python
-        vocos = Vocos(input_channels=128, dim=384, num_layers=8)
-        mel = torch.randn(4, 128, 50)  # (batch, mel_bins, frames)
-        audio = vocos(mel)  # (batch, 1, samples)
+        from soniq.models.vocoders.vocos import Vocos, VocosConfig
+
+        config = VocosConfig(
+            sample_rate=24000,
+            hop_length=256,
+            n_mel=100,
+            dim=512,
+            num_layers=4,
+        )
+        model = Vocos(config)
+
+        mel = torch.randn(4, 100, 50)  # (batch, n_mel, frames)
+        audio = model(mel)  # (batch, 1, samples)
         ```
     """
 
-    def __init__(
-        self,
-        input_channels: int = 128,
-        dim: int = 384,
-        intermediate_dim: int = 1152,
-        num_layers: int = 8,
-        n_fft: int = 800,
-        hop_size: int = 200,
-        padding: str = "same",
-        adanorm_num_embeddings: Optional[int] = None,
-    ):
-        super().__init__()
-        self.input_channels = input_channels
-        self.dim = dim
-        self.n_fft = n_fft
-        self.hop_size = hop_size
+    config_class = VocosConfig
+    base_model_prefix = "vocos"
+    supports_gradient_checkpointing = True
+
+    def __init__(self, config: VocosConfig):
+        super().__init__(config)
+        self.config = config
 
         # Backbone
         self.backbone = VocosBackbone(
-            input_channels=input_channels,
-            dim=dim,
-            intermediate_dim=intermediate_dim,
-            num_layers=num_layers,
-            adanorm_num_embeddings=adanorm_num_embeddings,
+            input_channels=config.n_mel,
+            dim=config.dim,
+            intermediate_dim=config.intermediate_dim,
+            num_layers=config.num_layers,
+            adanorm_num_embeddings=None,  # Can be extended for conditional vocoding
         )
 
         # Head
         self.head = ISTFTHead(
-            dim=dim,
-            n_fft=n_fft,
-            hop_length=hop_size,
-            padding=padding,
+            dim=config.dim,
+            n_fft=config.n_fft,
+            hop_length=config.hop_length,
+            padding="same",
         )
 
-        self._init_weights()
+        self.post_init()
 
-    def _init_weights(self):
+    def _init_weights(self, module):
         """Initialize weights."""
-        for module in self.modules():
-            if isinstance(module, (nn.Conv1d, nn.Linear)):
-                nn.init.xavier_uniform_(module.weight)
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+        if isinstance(module, (nn.Conv1d, nn.Linear)):
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
+    @property
+    def sample_rate(self) -> int:
+        """Get the audio sample rate."""
+        return self.config.sample_rate
+
+    @property
+    def hop_length(self) -> int:
+        """Get the hop length."""
+        return self.config.hop_length
+
+    @property
+    def n_fft(self) -> int:
+        """Get the FFT size."""
+        return self.config.n_fft
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Generate audio from mel spectrogram.
 
         Args:
-            x: Mel spectrogram (batch, input_channels, time)
+            x: Mel spectrogram (batch, n_mel, time)
 
         Returns:
             Audio waveform (batch, 1, time)
@@ -489,19 +496,35 @@ class Vocos(nn.Module):
 
         return audio
 
+    @torch.no_grad()
     def inference(self, x: torch.Tensor) -> torch.Tensor:
         """
         Inference mode (same as forward, but with eval()).
 
         Args:
-            x: Mel spectrogram (batch, input_channels, time)
+            x: Mel spectrogram (batch, n_mel, time)
 
         Returns:
             Audio waveform (batch, 1, time)
         """
         self.eval()
-        with torch.no_grad():
-            return self.forward(x)
+        return self.forward(x)
+
+    @torch.no_grad()
+    def generate(self, mel: torch.Tensor, **kwargs) -> Dict[str, torch.Tensor]:
+        """
+        Generate audio from mel spectrogram.
+
+        Args:
+            mel: Mel spectrogram (batch, n_mel, time)
+            **kwargs: Additional arguments
+
+        Returns:
+            Dictionary with 'waveform' key containing audio
+        """
+        self.eval()
+        waveform = self.forward(mel)
+        return {"waveform": waveform}
 
 
 __all__ = ["Vocos", "VocosBackbone", "ISTFTHead", "ISTFT", "ConvNeXtBlock", "AdaLayerNorm"]

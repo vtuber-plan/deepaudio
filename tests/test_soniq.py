@@ -33,7 +33,7 @@ def test_imports():
     print("  ✓ soniq.pipelines")
 
     # Test training
-    from soniq.training import FabricTrainer
+    from soniq.training import Trainer
     print("  ✓ soniq.training")
 
     # Test datasets

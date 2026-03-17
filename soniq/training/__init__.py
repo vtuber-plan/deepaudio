@@ -38,9 +38,6 @@ Example:
 # 核心训练器
 from .trainer import Trainer
 
-# 兼容旧代码：保留 FabricTrainer
-from .fabric_trainer import FabricTrainer
-
 # 引擎
 from .engines import (
     BaseEngine,
@@ -68,10 +65,8 @@ from .vocoder import (
 )
 
 __all__ = [
-    # 新统一 Trainer
+    # 统一 Trainer
     "Trainer",
-    # 兼容旧代码
-    "FabricTrainer",
     # 引擎
     "BaseEngine",
     "AccelerateEngineAdapter",

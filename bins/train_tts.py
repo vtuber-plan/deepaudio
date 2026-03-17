@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 # Add soniq to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from soniq.training import FabricTrainer
+from soniq.training import Trainer
 from soniq.config import load_config
 
 
@@ -27,6 +27,8 @@ def parse_args():
     parser.add_argument("--exp-name", type=str, default="tts_exp", help="Experiment name")
     parser.add_argument("--output-dir", type=str, default="./outputs", help="Output directory")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
+    parser.add_argument("--engine", type=str, default="accelerate", choices=["accelerate", "fabric"],
+                        help="Training engine to use")
     return parser.parse_args()
 
 

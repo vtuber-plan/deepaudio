@@ -1,135 +1,158 @@
 # coding=utf-8
-"""MaskGCT configuration."""
+"""MaskGCT model configuration."""
 
-from dataclasses import dataclass, field
-from typing import List, Optional
 from transformers import PretrainedConfig
+from typing import Optional
+
+
+class MaskGCTT2SConfig(PretrainedConfig):
+    """
+    Configuration class for MaskGCT Text-to-Semantic (T2S) model.
+
+    Args:
+        hidden_size: Hidden dimension size (default: 1536)
+        num_hidden_layers: Number of transformer layers (default: 16)
+        num_attention_heads: Number of attention heads (default: 16)
+        intermediate_size: FFN intermediate size (default: 6144)
+        vocab_size: Phone vocabulary size (default: 1024)
+        codebook_size: Semantic codebook size (default: 8192)
+        cond_dim: Conditioning dimension for semantic tokens (default: 1024)
+        max_seq_len: Maximum sequence length (default: 2048)
+        dropout: Dropout probability (default: 0.1)
+        mask_prob_min: Minimum mask probability (default: 0.6)
+        mask_prob_max: Maximum mask probability (default: 1.0)
+        prompt_ratio: Ratio of prompt tokens (default: 0.4)
+
+    Example:
+        ```python
+        config = MaskGCTT2SConfig(
+            hidden_size=1536,
+            num_hidden_layers=16,
+            num_attention_heads=16,
+            codebook_size=8192,
+        )
+        ```
+    """
+
+    model_type = "maskgct_t2s"
+
+    def __init__(
+        self,
+        hidden_size: int = 1536,
+        num_hidden_layers: int = 16,
+        num_attention_heads: int = 16,
+        intermediate_size: int = 6144,
+        vocab_size: int = 1024,
+        codebook_size: int = 8192,
+        cond_dim: int = 1024,
+        max_seq_len: int = 2048,
+        dropout: float = 0.1,
+        mask_prob_min: float = 0.6,
+        mask_prob_max: float = 1.0,
+        prompt_ratio: float = 0.4,
+        **kwargs,
+    ):
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.vocab_size = vocab_size
+        self.codebook_size = codebook_size
+        self.cond_dim = cond_dim
+        self.max_seq_len = max_seq_len
+        self.dropout = dropout
+        self.mask_prob_min = mask_prob_min
+        self.mask_prob_max = mask_prob_max
+        self.prompt_ratio = prompt_ratio
+        super().__init__(**kwargs)
+
+
+class MaskGCTS2AConfig(PretrainedConfig):
+    """
+    Configuration class for MaskGCT Semantic-to-Acoustic (S2A) model.
+
+    Args:
+        hidden_size: Hidden dimension size (default: 1024)
+        num_hidden_layers: Number of transformer layers (default: 16)
+        num_attention_heads: Number of attention heads (default: 16)
+        intermediate_size: FFN intermediate size (default: 4096)
+        num_quantizers: Number of RVQ quantizers (default: 12)
+        codebook_size: Codebook size per quantizer (default: 1024)
+        semantic_codebook_size: Semantic token codebook size for conditioning (default: 8192)
+        max_seq_len: Maximum sequence length (default: 2048)
+        dropout: Dropout probability (default: 0.1)
+        mask_layer_schedule: How to schedule mask layers ("linear", "cosine")
+
+    Example:
+        ```python
+        config = MaskGCTS2AConfig(
+            hidden_size=1024,
+            num_hidden_layers=16,
+            num_quantizers=12,
+            codebook_size=1024,
+        )
+        ```
+    """
+
+    model_type = "maskgct_s2a"
+
+    def __init__(
+        self,
+        hidden_size: int = 1024,
+        num_hidden_layers: int = 16,
+        num_attention_heads: int = 16,
+        intermediate_size: int = 4096,
+        num_quantizers: int = 12,
+        codebook_size: int = 1024,
+        semantic_codebook_size: int = 8192,
+        max_seq_len: int = 2048,
+        dropout: float = 0.1,
+        mask_layer_schedule: str = "linear",
+        **kwargs,
+    ):
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.num_quantizers = num_quantizers
+        self.codebook_size = codebook_size
+        self.semantic_codebook_size = semantic_codebook_size
+        self.max_seq_len = max_seq_len
+        self.dropout = dropout
+        self.mask_layer_schedule = mask_layer_schedule
+        super().__init__(**kwargs)
 
 
 class MaskGCTConfig(PretrainedConfig):
     """
-    Configuration for MaskGCT model.
+    Configuration class for the full MaskGCT model.
 
-    MaskGCT is a fully non-autoregressive TTS model with two stages:
-    - T2S: Text to Semantic tokens
-    - S2A: Semantic to Acoustic tokens
+    Args:
+        t2s_config: Configuration for Text-to-Semantic model
+        s2a_config: Configuration for Semantic-to-Acoustic model
+        sample_rate: Audio sample rate in Hz (default: 24000)
+        hop_length: Hop length for audio synthesis (default: 480)
+
+    Example:
+        ```python
+        t2s_config = MaskGCTT2SConfig()
+        s2a_config = MaskGCTS2AConfig()
+        config = MaskGCTConfig(t2s_config=t2s_config, s2a_config=s2a_config)
+        ```
     """
 
     model_type = "maskgct"
 
     def __init__(
         self,
-        # T2S model config
-        t2s_hidden_size: int = 1024,
-        t2s_num_layers: int = 16,
-        t2s_num_heads: int = 16,
-        t2s_cfg_scale: float = 0.2,
-        # S2A model config
-        s2a_hidden_size: int = 1024,
-        s2a_num_layers: int = 16,
-        s2a_num_heads: int = 16,
-        s2a_num_quantizers: int = 12,
-        s2a_cfg_scale: float = 0.15,
-        # Codebook config
-        semantic_codebook_size: int = 8192,
-        acoustic_codebook_size: int = 1024,
-        # Phone config
-        phone_vocab_size: int = 1024,
-        use_phone_cond: bool = True,
-        # Sampling
-        n_timesteps: int = 40,
-        temperature: float = 0.9,
-        filter_threshold: float = 0.98,
-        cfg_weight: float = 1.0,
-        # Audio
+        t2s_config: Optional[MaskGCTT2SConfig] = None,
+        s2a_config: Optional[MaskGCTS2AConfig] = None,
         sample_rate: int = 24000,
+        hop_length: int = 480,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
-        # T2S
-        self.t2s_hidden_size = t2s_hidden_size
-        self.t2s_num_layers = t2s_num_layers
-        self.t2s_num_heads = t2s_num_heads
-        self.t2s_cfg_scale = t2s_cfg_scale
-
-        # S2A
-        self.s2a_hidden_size = s2a_hidden_size
-        self.s2a_num_layers = s2a_num_layers
-        self.s2a_num_heads = s2a_num_heads
-        self.s2a_num_quantizers = s2a_num_quantizers
-        self.s2a_cfg_scale = s2a_cfg_scale
-
-        # Codebook
-        self.semantic_codebook_size = semantic_codebook_size
-        self.acoustic_codebook_size = acoustic_codebook_size
-
-        # Phone
-        self.phone_vocab_size = phone_vocab_size
-        self.use_phone_cond = use_phone_cond
-
-        # Sampling
-        self.n_timesteps = n_timesteps
-        self.temperature = temperature
-        self.filter_threshold = filter_threshold
-        self.cfg_weight = cfg_weight
-
+        self.t2s_config = t2s_config or MaskGCTT2SConfig()
+        self.s2a_config = s2a_config or MaskGCTS2AConfig()
         self.sample_rate = sample_rate
-
-
-class MaskGCT_T2S_Config(PretrainedConfig):
-    """Configuration for MaskGCT T2S model."""
-
-    model_type = "maskgct_t2s"
-
-    def __init__(
-        self,
-        hidden_size: int = 1024,
-        num_layers: int = 16,
-        num_heads: int = 16,
-        cfg_scale: float = 0.2,
-        cond_codebook_size: int = 8192,
-        cond_dim: int = 1024,
-        use_phone_cond: bool = True,
-        phone_vocab_size: int = 1024,
-        **kwargs,
-    ):
+        self.hop_length = hop_length
         super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.cfg_scale = cfg_scale
-        self.cond_codebook_size = cond_codebook_size
-        self.cond_dim = cond_dim
-        self.use_phone_cond = use_phone_cond
-        self.phone_vocab_size = phone_vocab_size
-
-
-class MaskGCT_S2A_Config(PretrainedConfig):
-    """Configuration for MaskGCT S2A model."""
-
-    model_type = "maskgct_s2a"
-
-    def __init__(
-        self,
-        num_quantizers: int = 12,
-        hidden_size: int = 1024,
-        num_layers: int = 16,
-        num_heads: int = 16,
-        codebook_size: int = 1024,
-        cfg_scale: float = 0.15,
-        mask_layer_schedule: str = "linear",
-        cond_codebook_size: int = 8192,
-        predict_layer_1: bool = True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.num_quantizers = num_quantizers
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.num_heads = num_heads
-        self.codebook_size = codebook_size
-        self.cfg_scale = cfg_scale
-        self.mask_layer_schedule = mask_layer_schedule
-        self.cond_codebook_size = cond_codebook_size
-        self.predict_layer_1 = predict_layer_1

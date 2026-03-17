@@ -144,12 +144,13 @@ class DualCodec(PreTrainedModel):
         codes = rearrange(codes, "b 1 t -> b t")
         return codes
 
+    @torch.no_grad()
     def encode(
         self,
         audio_data: torch.Tensor,
         semantic_repr: torch.Tensor,
         sample_rate: int = None,
-        num_quantizers: int = None,
+        n_quantizers: int = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Encode audio with semantic features.
@@ -158,7 +159,7 @@ class DualCodec(PreTrainedModel):
             audio_data: Audio tensor (B, 1, T).
             semantic_repr: W2V-BERT features (B, D, T).
             sample_rate: Sample rate.
-            num_quantizers: Number of acoustic quantizers.
+            n_quantizers: Number of acoustic quantizers.
 
         Returns:
             semantic_codes: Semantic codes (B, T).
@@ -176,17 +177,17 @@ class DualCodec(PreTrainedModel):
 
         semantic_codes = codes
 
-        if num_quantizers == 1:
+        if n_quantizers == 1:
             return semantic_codes, None
 
-        if num_quantizers is not None:
-            num_quantizers -= 1
+        if n_quantizers is not None:
+            n_quantizers -= 1
 
         # Encode acoustic with semantic subtraction
         acoustic_codes = self.dac.encode(
             audio_data,
             sample_rate=sample_rate or self.config.sample_rate,
-            n_quantizers=num_quantizers,
+            n_quantizers=n_quantizers,
             subtracted_latent=semantic,
         )[1]
 

@@ -1,9 +1,27 @@
-"""Example: Training a HiFi-GAN vocoder."""
+"""Example: Training a HiFi-GAN vocoder using the unified Trainer."""
 
 import torch
-from soniq.training import FabricTrainer
+from soniq.training import Trainer, BaseTaskSystem, StepOutput
 from soniq.models.vocoders.hifigan import HifiGAN, HifiGANConfig
 from soniq.datasets import BaseDataset, BaseCollator, build_dataloader
+
+
+class SimpleVocoderSystem(BaseTaskSystem):
+    """Simple vocoder training system."""
+
+    def __init__(self, config, generator):
+        super().__init__(config)
+        self.generator = generator
+
+    def training_step(self, batch, batch_idx):
+        mel = batch["mel"]
+        audio = batch["wav"]
+        generated = self.generator(mel)
+        loss = torch.nn.functional.l1_loss(generated, audio)
+        return StepOutput(loss=loss, metrics={"l1_loss": loss.item()})
+
+    def configure_optimizers(self):
+        return torch.optim.AdamW(self.generator.parameters(), lr=2e-4)
 
 
 def main():
@@ -17,6 +35,9 @@ def main():
     # Model
     model = HifiGAN(config)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
+
+    # Create training system
+    system = SimpleVocoderSystem(config={}, generator=model)
 
     # Dataset (update paths to your data)
     dataset = BaseDataset(
@@ -33,29 +54,18 @@ def main():
         num_workers=4,
     )
 
-    # Trainer
-    trainer = FabricTrainer(
-        accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        devices=1,
-        precision="16-mixed" if torch.cuda.is_available() else "32-true",
+    # Unified Trainer (can switch between accelerate and fabric)
+    trainer = Trainer(
+        engine="accelerate",  # or "fabric"
+        run_path="./outputs/hifigan_example",
         max_epochs=100,
+        gradient_clip_val=1.0,
     )
 
-    # Training step
-    def train_step(model, batch):
-        mel = batch["mel"]
-        audio = batch["wav"]
-        generated = model(mel)
-        loss = torch.nn.functional.l1_loss(generated, audio)
-        return loss
-
     # Train
-    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-4)
     trainer.fit(
-        model,
-        dataloader,
-        optimizer=optimizer,
-        train_step_fn=train_step,
+        system=system,
+        train_dataloader=dataloader,
     )
 
     print("Training completed!")

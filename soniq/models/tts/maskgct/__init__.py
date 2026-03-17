@@ -1,32 +1,37 @@
 # coding=utf-8
-"""
-MaskGCT: Fully Non-Autoregressive Text-to-Speech.
+"""MaskGCT: Masked Generative Codec Transformer for TTS."""
 
-MaskGCT is a two-stage TTS model using mask-and-predict diffusion.
-"""
-
-from .configuration_maskgct import (
+from soniq.models.tts.maskgct.configuration_maskgct import (
     MaskGCTConfig,
-    MaskGCT_T2S_Config,
-    MaskGCT_S2A_Config,
+    MaskGCTT2SConfig,
+    MaskGCTS2AConfig,
 )
-from .modeling_maskgct import (
-    MaskGCT,
-    MaskGCT_T2S,
-    MaskGCT_S2A,
-    DiffusionTransformer,
+from soniq.models.tts.maskgct.modeling_maskgct import MaskGCT
+from soniq.models.tts.maskgct.modeling_maskgct_t2s import MaskGCT_T2S
+from soniq.models.tts.maskgct.modeling_maskgct_s2a import MaskGCT_S2A
+from soniq.models.tts.maskgct.maskgct_components import (
+    MaskGCTBackbone,
+    MaskGCTTransformerBlock,
+    LlamaAdaptiveRMSNorm,
+    FeedForward,
     SinusoidalPosEmb,
-    AdaptiveRMSNorm,
+    GumbelSampler,
 )
 
 __all__ = [
+    # Configs
     "MaskGCTConfig",
-    "MaskGCT_T2S_Config",
-    "MaskGCT_S2A_Config",
+    "MaskGCTT2SConfig",
+    "MaskGCTS2AConfig",
+    # Models
     "MaskGCT",
     "MaskGCT_T2S",
     "MaskGCT_S2A",
-    "DiffusionTransformer",
+    # Components
+    "MaskGCTBackbone",
+    "MaskGCTTransformerBlock",
+    "LlamaAdaptiveRMSNorm",
+    "FeedForward",
     "SinusoidalPosEmb",
-    "AdaptiveRMSNorm",
+    "GumbelSampler",
 ]

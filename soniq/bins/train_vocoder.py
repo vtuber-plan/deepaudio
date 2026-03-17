@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # coding=utf-8
 """
-Training script for HiFiGAN vocoder using the new Soniq architecture.
+Training script for HiFiGAN vocoder using the unified Trainer.
 
 Example usage:
     python -m soniq.bins.train_vocoder \
@@ -11,17 +11,19 @@ Example usage:
 
 import argparse
 import os
-import json
-from typing import Any, Dict
+from typing import Any
 
 import torch
 from torch.utils.data import DataLoader
 
 from soniq.config.experiment import ExperimentConfig
-from soniq.runtime.engine import FabricEngine
-from soniq.tasks.vocoder.system import VocoderTaskSystem, VocoderConfig
-from soniq.tasks.vocoder.datasets import VocoderDataset
-from soniq.tasks.vocoder.collators import VocoderCollator
+from soniq.training import (
+    Trainer,
+    VocoderDataset,
+    VocoderCollator,
+    VocoderTaskSystem,
+    VocoderConfig,
+)
 from soniq.models.vocoders.hifigan import HifiGAN, HifiGANConfig
 
 
@@ -46,6 +48,13 @@ def parse_args():
         type=str,
         default=None,
         help="Path to checkpoint to resume from",
+    )
+    parser.add_argument(
+        "--engine",
+        type=str,
+        default="accelerate",
+        choices=["accelerate", "fabric"],
+        help="Training engine to use",
     )
 
     # Override arguments
@@ -197,49 +206,28 @@ def main():
             split="val",
         )
 
-    # Parse devices
-    devices = args.devices
-    if devices == "auto":
-        devices = 1 if torch.cuda.is_available() else None
-    elif devices.isdigit():
-        devices = int(devices)
-    else:
-        devices = [int(d) for d in devices.split(",")]
-
-    # Build engine
-    print("Initializing training engine...")
-    engine = FabricEngine(
-        accelerator="gpu" if torch.cuda.is_available() else "cpu",
-        strategy="auto",
-        devices=devices,
-        precision=experiment_config.precision,
+    # Build unified trainer
+    print(f"Initializing training engine: {args.engine}...")
+    trainer = Trainer(
+        engine=args.engine,
+        run_path=args.output_dir,
+        max_epochs=experiment_config.train.max_epochs,
+        max_steps=getattr(experiment_config.train, 'max_steps', None),
         gradient_accumulation_steps=getattr(experiment_config.train, 'gradient_accumulation_steps', 1),
         gradient_clip_val=getattr(experiment_config.train, 'gradient_clip_val', 1.0),
     )
 
     # Train
     print("Starting training...")
-    engine.fit(
+    trainer.fit(
         system=system,
         train_dataloader=train_dataloader,
         val_dataloader=val_dataloader,
-        max_epochs=experiment_config.train.max_epochs,
-        max_steps=getattr(experiment_config.train, 'max_steps', None),
         resume_from_checkpoint=args.resume,
     )
 
     print("Training complete!")
-
-    # Save final checkpoint
-    final_checkpoint_path = os.path.join(args.output_dir, "model_final.pt")
-    optimizers = system.configure_optimizers()
-    engine.save_checkpoint(
-        system=system,
-        optimizer=optimizers,
-        path=final_checkpoint_path,
-        extra={"config": experiment_config.__dict__},
-    )
-    print(f"Final checkpoint saved to: {final_checkpoint_path}")
+    print(f"Checkpoints saved to: {args.output_dir}/checkpoints/")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 # coding=utf-8
 """Vocos vocoder - Modern efficient vocoder based on ConvNeXt + ISTFT."""
 
+from soniq.models.vocoders.vocos.configuration_vocos import VocosConfig
 from soniq.models.vocoders.vocos.modeling_vocos import (
     Vocos,
     VocosBackbone,
@@ -23,6 +24,8 @@ from soniq.models.vocoders.vocos.loss import (
 )
 
 __all__ = [
+    # Config
+    "VocosConfig",
     # Model
     "Vocos",
     "VocosBackbone",
