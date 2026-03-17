@@ -2,10 +2,10 @@
 """
 Fabric Engine Adapter for Soniq Training.
 
-基于 Lightning Fabric 的引擎适配器。
+基于 Lightning Fabric 的训练引擎主类。
 """
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
@@ -18,9 +18,12 @@ try:
 except ImportError:
     FABRIC_AVAILABLE = False
 
-from .base import BaseEngine
-from ..base.context import EngineContext
-from ..base.callback import CallbackList
+from ..base import BaseEngine
+from ...base.context import EngineContext
+from ...base.callback import CallbackList
+from .loggers import create_fabric_loggers
+from .checkpoint import FabricCheckpointManager
+from .distributed import FabricDistributed
 
 
 class FabricEngineAdapter(BaseEngine):
@@ -32,7 +35,11 @@ class FabricEngineAdapter(BaseEngine):
     Example:
         ```python
         ctx = EngineContext(seed=42, num_iterations=10000)
-        engine = FabricEngineAdapter(ctx, precision="16-mixed")
+        engine = FabricEngineAdapter(
+            ctx,
+            precision="16-mixed",
+            logger_types=["tensorboard", "wandb"],
+        )
         model, optimizer, train_dl, val_dl = engine.setup(
             model, optimizer, train_dataloader, val_dataloader
         )
@@ -45,6 +52,10 @@ class FabricEngineAdapter(BaseEngine):
         self,
         ctx: EngineContext,
         callbacks: Optional[CallbackList] = None,
+        # Logger 配置
+        logger_types: Optional[List[str]] = None,
+        logger_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+        # Fabric 配置
         **fabric_kwargs,
     ):
         """
@@ -53,11 +64,14 @@ class FabricEngineAdapter(BaseEngine):
         Args:
             ctx: 训练上下文
             callbacks: 回调列表
+            logger_types: Logger 类型列表，如 ["tensorboard", "wandb"]
+            logger_configs: 各 Logger 的配置
             **fabric_kwargs: Fabric 初始化参数
         """
         if not FABRIC_AVAILABLE:
             raise ImportError(
-                "Lightning Fabric is not available. Please install it with: pip install lightning"
+                "Lightning Fabric is not available. "
+                "Please install it with: pip install lightning"
             )
 
         super().__init__(ctx, callbacks)
@@ -67,19 +81,29 @@ class FabricEngineAdapter(BaseEngine):
         fabric_kwargs.setdefault("accelerator", "auto")
         fabric_kwargs.setdefault("precision", "32-true")
 
-        # 设置 logger
+        # 创建 Logger
         if "loggers" not in fabric_kwargs:
-            fabric_kwargs["loggers"] = [
-                TensorBoardLogger(
-                    root_dir=ctx.metrics_path,
-                    name="",
-                )
-            ]
+            loggers = create_fabric_loggers(
+                ctx,
+                logger_types=logger_types,
+                logger_configs=logger_configs,
+            )
+            if loggers:
+                fabric_kwargs["loggers"] = loggers
+            else:
+                # 默认使用 TensorBoard
+                fabric_kwargs["loggers"] = [
+                    TensorBoardLogger(root_dir=ctx.metrics_path, name="")
+                ]
 
         self.fabric = Fabric(**fabric_kwargs)
-
-        # 更新 context 中的分布式信息（需要在 launch 后才能获取准确的值）
         self._fabric_kwargs = fabric_kwargs
+
+        # 初始化组件
+        self._checkpoint_manager: Optional[FabricCheckpointManager] = None
+        self._distributed: Optional[FabricDistributed] = None
+
+    # ==================== 核心方法 ====================
 
     def setup(
         self,
@@ -89,19 +113,7 @@ class FabricEngineAdapter(BaseEngine):
         val_dataloader: Optional[DataLoader] = None,
         scheduler: Optional[Any] = None,
     ) -> Tuple[torch.nn.Module, torch.optim.Optimizer, DataLoader, Optional[DataLoader]]:
-        """
-        使用 Fabric 准备模型、优化器和数据加载器。
-
-        Args:
-            model: 模型
-            optimizer: 优化器
-            train_dataloader: 训练数据加载器
-            val_dataloader: 验证数据加载器
-            scheduler: 学习率调度器
-
-        Returns:
-            (prepared_model, prepared_optimizer, prepared_train_dl, prepared_val_dl)
-        """
+        """设置模型、优化器和数据加载器。"""
         # 启动 Fabric
         self.fabric.launch()
 
@@ -131,6 +143,10 @@ class FabricEngineAdapter(BaseEngine):
         self._train_dataloader = prepared_train_dl
         self._val_dataloader = prepared_val_dl
 
+        # 初始化组件
+        self._checkpoint_manager = FabricCheckpointManager(self.fabric, self.ctx)
+        self._distributed = FabricDistributed(self.fabric)
+
         return prepared_model, prepared_optimizer, prepared_train_dl, prepared_val_dl
 
     def backward(self, loss: torch.Tensor) -> None:
@@ -149,17 +165,7 @@ class FabricEngineAdapter(BaseEngine):
         clip_val: float,
         clip_algorithm: str = "norm",
     ) -> Optional[float]:
-        """
-        裁剪梯度。
-
-        Args:
-            model: 模型
-            clip_val: 裁剪值
-            clip_algorithm: 裁剪算法 ("norm" 或 "value")
-
-        Returns:
-            梯度范数（如果使用 norm 算法）
-        """
+        """裁剪梯度。"""
         if clip_algorithm == "norm":
             return self.fabric.clip_gradients(
                 model,
@@ -176,52 +182,49 @@ class FabricEngineAdapter(BaseEngine):
         else:
             raise ValueError(f"Unknown clip algorithm: {clip_algorithm}")
 
+    # ==================== 检查点方法 ====================
+
     def save_checkpoint(
         self,
         path: Union[str, Path],
         state: Optional[Dict] = None,
     ) -> None:
-        """
-        保存检查点。
+        """保存检查点。"""
+        if self._checkpoint_manager is not None:
+            self._checkpoint_manager.save(
+                model=self._model,
+                optimizer=self._optimizer,
+                scheduler=self._scheduler,
+                step=self.ctx.iteration,
+                extra_state=state,
+            )
+        else:
+            # 直接使用 Fabric 保存
+            self.fabric.barrier()
+            path = Path(path)
+            path.mkdir(parents=True, exist_ok=True)
 
-        Args:
-            path: 检查点保存路径
-            state: 额外状态
-        """
-        self.fabric.barrier()
-        path = Path(path)
-        path.mkdir(parents=True, exist_ok=True)
+            save_state = {
+                "model": self._model,
+                "epoch": self.ctx.epoch,
+                "iteration": self.ctx.iteration,
+                "ctx": self.ctx.to_dict(),
+            }
+            if self._optimizer is not None:
+                save_state["optimizer"] = self._optimizer
+            if self._scheduler is not None:
+                save_state["scheduler"] = self._scheduler
+            if state is not None:
+                save_state.update(state)
 
-        save_state = {
-            "model": self._model,
-            "epoch": self.ctx.epoch,
-            "iteration": self.ctx.iteration,
-            "ctx": self.ctx.to_dict(),
-        }
-        if self._optimizer is not None:
-            save_state["optimizer"] = self._optimizer
-        if self._scheduler is not None:
-            save_state["scheduler"] = self._scheduler
-        if state is not None:
-            save_state.update(state)
-
-        self.fabric.save(str(path / "state.ckpt"), save_state)
+            self.fabric.save(str(path / "state.ckpt"), save_state)
 
     def load_checkpoint(
         self,
         path: Union[str, Path],
         state: Optional[Dict] = None,
     ) -> Dict:
-        """
-        加载检查点。
-
-        Args:
-            path: 检查点路径
-            state: 要加载的状态字典
-
-        Returns:
-            加载的状态
-        """
+        """加载检查点。"""
         path = Path(path)
         ckpt_file = path / "state.ckpt" if path.is_dir() else path
 
@@ -233,7 +236,6 @@ class FabricEngineAdapter(BaseEngine):
 
         self.fabric.load(str(ckpt_file), load_state)
 
-        # 更新上下文
         if "ctx" in load_state:
             self.ctx.update_from_checkpoint(load_state)
         elif "iteration" in load_state:
@@ -243,26 +245,16 @@ class FabricEngineAdapter(BaseEngine):
         return load_state
 
     def save_model(self, model: torch.nn.Module, path: Union[str, Path]) -> None:
-        """
-        保存模型权重。
-
-        Args:
-            model: 模型
-            path: 保存路径
-        """
+        """保存模型权重。"""
         self.fabric.barrier()
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
         self.fabric.save(str(path / "model.ckpt"), {"model": model})
 
-    def log(self, metrics: Dict[str, Any], step: Optional[int] = None) -> None:
-        """
-        记录指标。
+    # ==================== 日志方法 ====================
 
-        Args:
-            metrics: 指标字典
-            step: 步数
-        """
+    def log(self, metrics: Dict[str, Any], step: Optional[int] = None) -> None:
+        """记录指标。"""
         for key, value in metrics.items():
             self.fabric.log(key, value, step=step)
 
@@ -273,28 +265,18 @@ class FabricEngineAdapter(BaseEngine):
         sample_rate: int,
         step: Optional[int] = None,
     ) -> None:
-        """
-        记录音频。
+        """记录音频。"""
+        import numpy as np
 
-        Args:
-            name: 音频名称
-            audio: 音频张量 (channels, samples) 或 (batch, channels, samples)
-            sample_rate: 采样率
-            step: 步数
-        """
-        # Fabric 的 log 不支持 sample_rate，直接使用 TensorBoard writer
         for logger in self.fabric.loggers:
             if hasattr(logger, 'experiment'):
                 writer = logger.experiment
-                import numpy as np
 
-                # 转换为 numpy
                 if isinstance(audio, torch.Tensor):
                     audio_np = audio.cpu().numpy()
                 else:
                     audio_np = audio
 
-                # 确保形状正确
                 if audio_np.ndim == 2:
                     audio_np = audio_np[np.newaxis, ...]
 
@@ -306,27 +288,19 @@ class FabricEngineAdapter(BaseEngine):
         image: torch.Tensor,
         step: Optional[int] = None,
     ) -> None:
-        """
-        记录图像。
-
-        Args:
-            name: 图像名称
-            image: 图像张量 (C, H, W) 或 (batch, C, H, W)
-            step: 步数
-        """
-        # 直接使用 TensorBoard writer
+        """记录图像。"""
         for logger in self.fabric.loggers:
             if hasattr(logger, 'experiment'):
                 writer = logger.experiment
-                import numpy as np
 
-                # 转换为 numpy
                 if isinstance(image, torch.Tensor):
                     image_np = image.cpu().numpy()
                 else:
                     image_np = image
 
                 writer.add_image(name, image_np, global_step=step or 0)
+
+    # ==================== 分布式方法 ====================
 
     def is_main_process(self) -> bool:
         """当前是否为主进程。"""
@@ -337,30 +311,11 @@ class FabricEngineAdapter(BaseEngine):
         return self.fabric.local_rank == 0
 
     def gather(self, tensor: torch.Tensor) -> torch.Tensor:
-        """
-        从所有进程收集张量。
-
-        Args:
-            tensor: 输入张量
-
-        Returns:
-            收集后的张量
-        """
+        """从所有进程收集张量。"""
         return self.fabric.all_gather(tensor)
 
-    def all_reduce(
-        self, tensor: torch.Tensor, op: str = "mean"
-    ) -> torch.Tensor:
-        """
-        跨进程归约张量。
-
-        Args:
-            tensor: 输入张量
-            op: 归约操作 ("mean", "sum")
-
-        Returns:
-            归约后的张量
-        """
+    def all_reduce(self, tensor: torch.Tensor, op: str = "mean") -> torch.Tensor:
+        """跨进程归约张量。"""
         gathered = self.fabric.all_gather(tensor)
         if op == "mean":
             return gathered.mean()
@@ -376,6 +331,8 @@ class FabricEngineAdapter(BaseEngine):
         """等待所有进程完成。"""
         self.fabric.barrier()
 
+    # ==================== 属性 ====================
+
     @property
     def device(self) -> torch.device:
         """获取当前设备。"""
@@ -387,20 +344,10 @@ class FabricEngineAdapter(BaseEngine):
         return str(self.fabric.precision)
 
     def autocast(self, enabled: bool = True):
-        """
-        获取自动混合精度上下文管理器。
-
-        Args:
-            enabled: 是否启用（Fabric 不支持此参数，返回空上下文）
-
-        Returns:
-            上下文管理器
-        """
+        """获取自动混合精度上下文管理器。"""
         if enabled:
             return self.fabric.autocast()
         else:
-            # Fabric 不支持禁用 autocast，返回空上下文
-            from contextlib import nullcontext
             return nullcontext()
 
     @property
@@ -409,25 +356,21 @@ class FabricEngineAdapter(BaseEngine):
         return getattr(self.fabric, "gradient_accumulation_steps", 1)
 
     def is_gradient_accumulation_boundary(self) -> bool:
-        """
-        当前是否为梯度累积边界。
-
-        Fabric 会自动处理梯度累积边界，默认返回 True。
-
-        Returns:
-            是否为梯度累积边界
-        """
-        # Fabric 自动处理梯度累积
+        """当前是否为梯度累积边界。"""
         return True
 
     def unwrap_model(self, model: torch.nn.Module) -> torch.nn.Module:
-        """
-        获取未包装的原始模型。
-
-        Args:
-            model: 包装后的模型
-
-        Returns:
-            原始模型
-        """
+        """获取未包装的原始模型。"""
         return self.fabric.unwrap(model)
+
+    # ==================== 组件访问 ====================
+
+    @property
+    def checkpoint_manager(self) -> Optional[FabricCheckpointManager]:
+        """获取检查点管理器。"""
+        return self._checkpoint_manager
+
+    @property
+    def distributed(self) -> Optional[FabricDistributed]:
+        """获取分布式工具。"""
+        return self._distributed

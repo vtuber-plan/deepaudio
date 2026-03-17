@@ -7,6 +7,7 @@ Soniq Training Module.
 Features:
 - Trainer: 统一训练器，支持多引擎切换
 - Engines: 训练引擎 (Accelerate, Fabric)
+- Loggers: 日志记录器 (TensorBoard, WandB, MLflow, etc.)
 - Task Systems: 任务系统 (VocoderTaskSystem, VocosTaskSystem)
 - Callbacks: 训练回调
 - Loss Functions: 损失函数
@@ -48,6 +49,14 @@ from .engines import (
     get_available_engines,
 )
 
+# 日志记录器
+from .loggers import (
+    BaseLogger,
+    LoggerRegistry,
+    TensorBoardLoggerAdapter,
+    CompositeLogger,
+)
+
 # 基类
 from .base.system import BaseTaskSystem
 from .base.outputs import StepOutput, EvalOutput, InferOutput
@@ -74,6 +83,11 @@ __all__ = [
     "create_engine",
     "list_engines",
     "get_available_engines",
+    # 日志记录器
+    "BaseLogger",
+    "LoggerRegistry",
+    "TensorBoardLoggerAdapter",
+    "CompositeLogger",
     # 基类
     "BaseTaskSystem",
     "StepOutput",

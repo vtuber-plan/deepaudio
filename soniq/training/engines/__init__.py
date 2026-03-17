@@ -26,8 +26,9 @@ from .factory import (
     ENGINE_REGISTRY,
 )
 
-# 延迟导入具体引擎类
+
 def __getattr__(name: str):
+    """延迟导入引擎类。"""
     if name == "AccelerateEngineAdapter":
         from .accelerate_engine import AccelerateEngineAdapter
         return AccelerateEngineAdapter

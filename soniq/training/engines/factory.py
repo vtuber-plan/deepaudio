@@ -67,6 +67,14 @@ def create_engine(
         ```python
         ctx = EngineContext(seed=42)
         engine = create_engine("accelerate", ctx, mixed_precision="bf16")
+
+        # 使用多个 logger
+        engine = create_engine(
+            "fabric",
+            ctx,
+            logger_types=["tensorboard", "wandb"],
+            logger_configs={"wandb": {"project": "my-project"}}
+        )
         ```
     """
     # 确保引擎已注册

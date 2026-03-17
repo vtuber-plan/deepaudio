@@ -2,10 +2,10 @@
 """
 Accelerate Engine Adapter for Soniq Training.
 
-基于 HuggingFace Accelerate 的引擎适配器。
+基于 HuggingFace Accelerate 的训练引擎主类。
 """
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
@@ -18,9 +18,12 @@ try:
 except ImportError:
     ACCELERATE_AVAILABLE = False
 
-from .base import BaseEngine
-from ..base.context import EngineContext
-from ..base.callback import CallbackList
+from ..base import BaseEngine
+from ...base.context import EngineContext
+from ...base.callback import CallbackList
+from .trackers import create_accelerate_trackers
+from .checkpoint import AccelerateCheckpointManager
+from .distributed import AccelerateDistributed
 
 
 class AccelerateEngineAdapter(BaseEngine):
@@ -32,7 +35,11 @@ class AccelerateEngineAdapter(BaseEngine):
     Example:
         ```python
         ctx = EngineContext(seed=42, num_iterations=10000)
-        engine = AccelerateEngineAdapter(ctx, mixed_precision="bf16")
+        engine = AccelerateEngineAdapter(
+            ctx,
+            mixed_precision="bf16",
+            tracker_types=["tensorboard", "wandb"],
+        )
         model, optimizer, train_dl, val_dl = engine.setup(
             model, optimizer, train_dataloader, val_dataloader
         )
@@ -46,6 +53,10 @@ class AccelerateEngineAdapter(BaseEngine):
         ctx: EngineContext,
         callbacks: Optional[CallbackList] = None,
         accelerator: Optional["Accelerator"] = None,
+        # Tracker 配置
+        tracker_types: Optional[List[str]] = None,
+        tracker_configs: Optional[Dict[str, Dict[str, Any]]] = None,
+        # Accelerate 配置
         **accelerate_kwargs,
     ):
         """
@@ -54,12 +65,15 @@ class AccelerateEngineAdapter(BaseEngine):
         Args:
             ctx: 训练上下文
             callbacks: 回调列表
-            accelerator: 已有的 Accelerator 实例（如果提供，accelerate_kwargs 将被忽略）
+            accelerator: 已有的 Accelerator 实例
+            tracker_types: Tracker 类型列表
+            tracker_configs: 各 Tracker 的配置
             **accelerate_kwargs: Accelerator 初始化参数
         """
         if not ACCELERATE_AVAILABLE:
             raise ImportError(
-                "Accelerate is not available. Please install it with: pip install accelerate"
+                "Accelerate is not available. "
+                "Please install it with: pip install accelerate"
             )
 
         super().__init__(ctx, callbacks)
@@ -68,37 +82,9 @@ class AccelerateEngineAdapter(BaseEngine):
             self.accelerator = accelerator
         else:
             # 过滤并转换 Accelerator 支持的参数
-            # Accelerator 参数映射
-            accelerator_params = {}
-
-            # 处理 mixed_precision (accelerate 使用 mixed_precision，不是 precision)
-            if "precision" in accelerate_kwargs:
-                precision = accelerate_kwargs.pop("precision")
-                # 转换精度格式: "16-mixed" -> "fp16", "bf16" -> "bf16"
-                if precision in ["16-mixed", "16"]:
-                    accelerator_params["mixed_precision"] = "fp16"
-                elif precision in ["bf16", "bfloat16"]:
-                    accelerator_params["mixed_precision"] = "bf16"
-                elif precision in ["32", "32-true"]:
-                    accelerator_params["mixed_precision"] = "no"
-            elif "mixed_precision" in accelerate_kwargs:
-                accelerator_params["mixed_precision"] = accelerate_kwargs.pop("mixed_precision")
-
-            # 复制其他支持的参数
-            supported_keys = [
-                "gradient_accumulation_steps", "cpu", "device_placement",
-                "split_batches", "dispatch_batches", "even_batches",
-                "use_seedable_sampler", "step_scheduler_with_optimizer",
-                "log_with", "project_dir", "project_config", "tracker_filter"
-            ]
-            for key in supported_keys:
-                if key in accelerate_kwargs:
-                    accelerator_params[key] = accelerate_kwargs[key]
-
-            # 设置默认值
-            accelerator_params.setdefault("gradient_accumulation_steps", ctx.gradient_accumulation_steps)
-            accelerator_params.setdefault("log_with", None)
-
+            accelerator_params = self._filter_accelerator_params(
+                ctx, accelerate_kwargs, tracker_types, tracker_configs
+            )
             self.accelerator = Accelerator(**accelerator_params)
 
         # 更新 context 中的分布式信息
@@ -107,28 +93,85 @@ class AccelerateEngineAdapter(BaseEngine):
         ctx.world_size = self.accelerator.num_processes
         ctx.gradient_accumulation_steps = self.accelerator.gradient_accumulation_steps
 
-        # 设置 TensorBoard tracker
-        self._setup_tracker(ctx)
+        # 初始化组件
+        self._checkpoint_manager: Optional[AccelerateCheckpointManager] = None
+        self._distributed: Optional[AccelerateDistributed] = None
+        self._tensorboard_tracker = None
 
-    def _setup_tracker(self, ctx: EngineContext) -> None:
+        # 设置 TensorBoard tracker（如果需要）
+        self._setup_tensorboard(ctx, tracker_types)
+
+    def _filter_accelerator_params(
+        self,
+        ctx: EngineContext,
+        accelerate_kwargs: Dict[str, Any],
+        tracker_types: Optional[List[str]],
+        tracker_configs: Optional[Dict[str, Dict[str, Any]]],
+    ) -> Dict[str, Any]:
+        """过滤并转换 Accelerator 支持的参数。"""
+        accelerator_params = {}
+
+        # 处理 mixed_precision
+        if "precision" in accelerate_kwargs:
+            precision = accelerate_kwargs.pop("precision")
+            if precision in ["16-mixed", "16"]:
+                accelerator_params["mixed_precision"] = "fp16"
+            elif precision in ["bf16", "bfloat16"]:
+                accelerator_params["mixed_precision"] = "bf16"
+            elif precision in ["32", "32-true"]:
+                accelerator_params["mixed_precision"] = "no"
+        elif "mixed_precision" in accelerate_kwargs:
+            accelerator_params["mixed_precision"] = accelerate_kwargs.pop("mixed_precision")
+
+        # 复制其他支持的参数
+        supported_keys = [
+            "gradient_accumulation_steps", "cpu", "device_placement",
+            "split_batches", "dispatch_batches", "even_batches",
+            "use_seedable_sampler", "step_scheduler_with_optimizer",
+            "log_with", "project_dir", "project_config", "tracker_filter"
+        ]
+        for key in supported_keys:
+            if key in accelerate_kwargs:
+                accelerator_params[key] = accelerate_kwargs[key]
+
+        # 设置默认值
+        accelerator_params.setdefault("gradient_accumulation_steps", ctx.gradient_accumulation_steps)
+
+        # 创建 trackers
+        if tracker_types and "log_with" not in accelerator_params:
+            trackers = create_accelerate_trackers(
+                ctx,
+                tracker_types=tracker_types,
+                tracker_configs=tracker_configs,
+            )
+            if trackers:
+                accelerator_params["log_with"] = trackers
+
+        return accelerator_params
+
+    def _setup_tensorboard(
+        self,
+        ctx: EngineContext,
+        tracker_types: Optional[List[str]],
+    ) -> None:
         """设置 TensorBoard tracker。"""
         import datetime
 
-        # 创建 TensorBoard tracker
-        run_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        logging_dir = ctx.metrics_path
+        # 如果没有指定 tracker 或指定了 tensorboard，创建本地 tracker
+        if tracker_types is None or "tensorboard" in tracker_types or "tb" in tracker_types:
+            run_name = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            self._tensorboard_tracker = TensorBoardTracker(
+                run_name=run_name,
+                logging_dir=ctx.metrics_path,
+            )
+            self._tensorboard_tracker.start()
 
-        # 创建 tracker 并启动
-        self._tensorboard_tracker = TensorBoardTracker(
-            run_name=run_name,
-            logging_dir=logging_dir,
-        )
-        self._tensorboard_tracker.start()
+            # 添加到 accelerator
+            if self.accelerator.trackers is None:
+                self.accelerator.trackers = []
+            self.accelerator.trackers.append(self._tensorboard_tracker)
 
-        # 设置到 accelerator
-        if self.accelerator.trackers is None:
-            self.accelerator.trackers = []
-        self.accelerator.trackers.append(self._tensorboard_tracker)
+    # ==================== 核心方法 ====================
 
     def setup(
         self,
@@ -138,19 +181,7 @@ class AccelerateEngineAdapter(BaseEngine):
         val_dataloader: Optional[DataLoader] = None,
         scheduler: Optional[Any] = None,
     ) -> Tuple[torch.nn.Module, torch.optim.Optimizer, DataLoader, Optional[DataLoader]]:
-        """
-        使用 Accelerator 准备模型、优化器和数据加载器。
-
-        Args:
-            model: 模型
-            optimizer: 优化器
-            train_dataloader: 训练数据加载器
-            val_dataloader: 验证数据加载器
-            scheduler: 学习率调度器
-
-        Returns:
-            (prepared_model, prepared_optimizer, prepared_train_dl, prepared_val_dl)
-        """
+        """设置模型、优化器和数据加载器。"""
         if optimizer is None:
             optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
 
@@ -173,6 +204,10 @@ class AccelerateEngineAdapter(BaseEngine):
         if scheduler is not None:
             self._scheduler = self.accelerator.prepare(scheduler)
 
+        # 初始化组件
+        self._checkpoint_manager = AccelerateCheckpointManager(self.accelerator, self.ctx)
+        self._distributed = AccelerateDistributed(self.accelerator)
+
         return prepared_model, prepared_optimizer, prepared_train_dl, prepared_val_dl
 
     def backward(self, loss: torch.Tensor) -> None:
@@ -191,17 +226,7 @@ class AccelerateEngineAdapter(BaseEngine):
         clip_val: float,
         clip_algorithm: str = "norm",
     ) -> Optional[float]:
-        """
-        裁剪梯度。
-
-        Args:
-            model: 模型
-            clip_val: 裁剪值
-            clip_algorithm: 裁剪算法 ("norm" 或 "value")
-
-        Returns:
-            梯度范数（如果使用 norm 算法）
-        """
+        """裁剪梯度。"""
         if clip_algorithm == "norm":
             return self.accelerator.clip_grad_norm_(
                 model.parameters(), clip_val
@@ -212,54 +237,44 @@ class AccelerateEngineAdapter(BaseEngine):
         else:
             raise ValueError(f"Unknown clip algorithm: {clip_algorithm}")
 
+    # ==================== 检查点方法 ====================
+
     def save_checkpoint(
         self,
         path: Union[str, Path],
         state: Optional[Dict] = None,
     ) -> None:
-        """
-        保存检查点。
-
-        Args:
-            path: 检查点保存路径
-            state: 额外状态（会自动保存 ctx）
-        """
-        self.accelerator.wait_for_everyone()
-        path = Path(path)
-        path.mkdir(parents=True, exist_ok=True)
-        self.accelerator.save_state(str(path), safe_serialization=False)
+        """保存检查点。"""
+        if self._checkpoint_manager is not None:
+            self._checkpoint_manager.save(
+                model=self._model,
+                optimizer=self._optimizer,
+                scheduler=self._scheduler,
+                step=self.ctx.iteration,
+                extra_state=state,
+            )
+        else:
+            self.accelerator.wait_for_everyone()
+            path = Path(path)
+            path.mkdir(parents=True, exist_ok=True)
+            self.accelerator.save_state(str(path))
 
     def load_checkpoint(
         self,
         path: Union[str, Path],
         state: Optional[Dict] = None,
     ) -> Dict:
-        """
-        加载检查点。
-
-        Args:
-            path: 检查点路径
-            state: 要加载的状态字典（暂不使用）
-
-        Returns:
-            加载的状态（从 ctx 中获取）
-        """
+        """加载检查点。"""
         self.accelerator.load_state(str(path))
         return {"iteration": self.ctx.iteration, "epoch": self.ctx.epoch}
 
     def save_model(self, model: torch.nn.Module, path: Union[str, Path]) -> None:
-        """
-        保存模型权重。
-
-        Args:
-            model: 模型
-            path: 保存路径
-        """
+        """保存模型权重。"""
         self.accelerator.wait_for_everyone()
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
-        # 手动解包模型，避免 accelerator.unwrap_model 触发 deepspeed 导入
+        # 手动解包模型
         unwrapped_model = model
         while hasattr(unwrapped_model, 'module'):
             unwrapped_model = unwrapped_model.module
@@ -268,18 +283,13 @@ class AccelerateEngineAdapter(BaseEngine):
             state_dict = unwrapped_model.state_dict()
             torch.save(state_dict, str(path / "model.pt"))
 
-            # 同时保存 config 如果有 save_pretrained 方法
             if hasattr(unwrapped_model, 'config') and hasattr(unwrapped_model.config, 'save_pretrained'):
                 unwrapped_model.config.save_pretrained(str(path))
 
-    def log(self, metrics: Dict[str, Any], step: Optional[int] = None) -> None:
-        """
-        记录指标。
+    # ==================== 日志方法 ====================
 
-        Args:
-            metrics: 指标字典
-            step: 步数
-        """
+    def log(self, metrics: Dict[str, Any], step: Optional[int] = None) -> None:
+        """记录指标。"""
         self.accelerator.log(metrics, step=step)
 
     def log_audio(
@@ -289,28 +299,17 @@ class AccelerateEngineAdapter(BaseEngine):
         sample_rate: int,
         step: Optional[int] = None,
     ) -> None:
-        """
-        记录音频。
-
-        Args:
-            name: 音频名称
-            audio: 音频张量 (channels, samples) 或 (batch, channels, samples)
-            sample_rate: 采样率
-            step: 步数
-        """
-        # Accelerate 的 TensorBoardTracker 不支持 log_audios
-        # 直接使用 TensorBoard writer
-        if hasattr(self, '_tensorboard_tracker') and self._tensorboard_tracker is not None:
-            writer = self._tensorboard_tracker.writer
+        """记录音频。"""
+        if self._tensorboard_tracker is not None:
             import numpy as np
 
-            # 转换为 numpy
+            writer = self._tensorboard_tracker.writer
+
             if isinstance(audio, torch.Tensor):
                 audio_np = audio.cpu().numpy()
             else:
                 audio_np = audio
 
-            # 确保形状正确: (batch, channels, samples) -> 需要添加 batch 维度
             if audio_np.ndim == 2:
                 audio_np = audio_np[np.newaxis, ...]
 
@@ -322,26 +321,20 @@ class AccelerateEngineAdapter(BaseEngine):
         image: torch.Tensor,
         step: Optional[int] = None,
     ) -> None:
-        """
-        记录图像。
-
-        Args:
-            name: 图像名称
-            image: 图像张量 (C, H, W) 或 (batch, C, H, W)
-            step: 步数
-        """
-        # 直接使用 TensorBoard writer
-        if hasattr(self, '_tensorboard_tracker') and self._tensorboard_tracker is not None:
-            writer = self._tensorboard_tracker.writer
+        """记录图像。"""
+        if self._tensorboard_tracker is not None:
             import numpy as np
 
-            # 转换为 numpy
+            writer = self._tensorboard_tracker.writer
+
             if isinstance(image, torch.Tensor):
                 image_np = image.cpu().numpy()
             else:
                 image_np = image
 
             writer.add_image(name, image_np, global_step=step or 0)
+
+    # ==================== 分布式方法 ====================
 
     def is_main_process(self) -> bool:
         """当前是否为主进程。"""
@@ -352,30 +345,11 @@ class AccelerateEngineAdapter(BaseEngine):
         return self.accelerator.is_local_main_process
 
     def gather(self, tensor: torch.Tensor) -> torch.Tensor:
-        """
-        从所有进程收集张量。
-
-        Args:
-            tensor: 输入张量
-
-        Returns:
-            收集后的张量
-        """
+        """从所有进程收集张量。"""
         return self.accelerator.gather(tensor)
 
-    def all_reduce(
-        self, tensor: torch.Tensor, op: str = "mean"
-    ) -> torch.Tensor:
-        """
-        跨进程归约张量。
-
-        Args:
-            tensor: 输入张量
-            op: 归约操作 ("mean" 或 "sum")
-
-        Returns:
-            归约后的张量
-        """
+    def all_reduce(self, tensor: torch.Tensor, op: str = "mean") -> torch.Tensor:
+        """跨进程归约张量。"""
         reduction = "mean" if op == "mean" else "sum"
         return self.accelerator.reduce(tensor, reduction=reduction)
 
@@ -386,6 +360,8 @@ class AccelerateEngineAdapter(BaseEngine):
     def wait_for_everyone(self) -> None:
         """等待所有进程完成。"""
         self.accelerator.wait_for_everyone()
+
+    # ==================== 属性 ====================
 
     @property
     def device(self) -> torch.device:
@@ -398,17 +374,7 @@ class AccelerateEngineAdapter(BaseEngine):
         return str(self.accelerator.mixed_precision)
 
     def autocast(self, enabled: bool = True):
-        """
-        获取自动混合精度上下文管理器。
-
-        Args:
-            enabled: 是否启用
-
-        Returns:
-            上下文管理器
-        """
-        from contextlib import nullcontext
-
+        """获取自动混合精度上下文管理器。"""
         if enabled and self.accelerator.mixed_precision != "no":
             return self.accelerator.autocast()
         else:
@@ -420,44 +386,36 @@ class AccelerateEngineAdapter(BaseEngine):
         return self.accelerator.gradient_accumulation_steps
 
     def is_gradient_accumulation_boundary(self) -> bool:
-        """
-        当前是否为梯度累积边界。
-
-        Returns:
-            是否为梯度累积边界
-        """
+        """当前是否为梯度累积边界。"""
         return self.accelerator.sync_gradients
 
     def unwrap_model(self, model: torch.nn.Module) -> torch.nn.Module:
-        """
-        获取未包装的原始模型。
-
-        Args:
-            model: 包装后的模型
-
-        Returns:
-            原始模型
-        """
-        return self.accelerator.unwrap_model(model)
+        """获取未包装的原始模型。"""
+        unwrapped = model
+        while hasattr(unwrapped, 'module'):
+            unwrapped = unwrapped.module
+        return unwrapped
 
     @contextmanager
     def no_sync(self, model: torch.nn.Module):
-        """
-        禁用梯度同步的上下文管理器。
-
-        Args:
-            model: 模型
-
-        Yields:
-            None
-        """
+        """禁用梯度同步的上下文管理器。"""
         with self.accelerator.no_sync(model):
             yield
 
     def end_training(self) -> None:
         """结束训练，清理资源。"""
-        # 关闭 TensorBoard tracker
-        if hasattr(self, '_tensorboard_tracker') and self._tensorboard_tracker is not None:
+        if self._tensorboard_tracker is not None:
             self._tensorboard_tracker.finish()
-
         self.accelerator.end_training()
+
+    # ==================== 组件访问 ====================
+
+    @property
+    def checkpoint_manager(self) -> Optional[AccelerateCheckpointManager]:
+        """获取检查点管理器。"""
+        return self._checkpoint_manager
+
+    @property
+    def distributed(self) -> Optional[AccelerateDistributed]:
+        """获取分布式工具。"""
+        return self._distributed
