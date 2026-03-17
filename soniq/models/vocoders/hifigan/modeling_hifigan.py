@@ -246,3 +246,169 @@ class HifiGAN(BaseVocoderModel):
         self.eval()
         with torch.no_grad():
             return self.synthesize(acoustic_features, **kwargs)
+
+
+class HiFiGANGenerator(nn.Module):
+    """
+    HiFiGAN Generator module for use as decoder in TTS/SVC models.
+
+    This is a standalone generator without the full model wrapper,
+    designed to be used as a decoder component in models like VITS or VitsSVC.
+
+    Args:
+        in_channels: Number of input channels (latent dimension).
+        out_channels: Number of output channels (usually 1 for mono audio).
+        upsample_rates: List of upsampling rates.
+        upsample_initial_channel: Number of channels after initial convolution.
+        upsample_kernel_sizes: List of kernel sizes for upsampling layers.
+        resblock_kernel_sizes: List of kernel sizes for residual blocks.
+        resblock_dilation_sizes: List of dilation sizes for residual blocks.
+        gin_channels: Number of global conditioning channels (for speaker embedding).
+        lrelu_slope: Slope for LeakyReLU activation.
+
+    Example:
+        ```python
+        generator = HiFiGANGenerator(
+            in_channels=192,
+            out_channels=1,
+            upsample_rates=[8, 8, 2, 2],
+            upsample_initial_channel=512,
+            upsample_kernel_sizes=[16, 16, 4, 4],
+            resblock_kernel_sizes=[3, 7, 11],
+            resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+        )
+        z = torch.randn(1, 192, 100)  # Latent features
+        audio = generator(z)  # (1, 1, 100 * 256)
+        ```
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 192,
+        out_channels: int = 1,
+        upsample_rates: List[int] = None,
+        upsample_initial_channel: int = 512,
+        upsample_kernel_sizes: List[int] = None,
+        resblock_kernel_sizes: List[int] = None,
+        resblock_dilation_sizes: List[List[int]] = None,
+        gin_channels: int = 0,
+        lrelu_slope: float = 0.1,
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.num_upsamples = len(upsample_rates) if upsample_rates else 4
+        self.lrelu_slope = lrelu_slope
+        self.gin_channels = gin_channels
+
+        # Default values
+        if upsample_rates is None:
+            upsample_rates = [8, 8, 2, 2]
+        if upsample_kernel_sizes is None:
+            upsample_kernel_sizes = [16, 16, 4, 4]
+        if resblock_kernel_sizes is None:
+            resblock_kernel_sizes = [3, 7, 11]
+        if resblock_dilation_sizes is None:
+            resblock_dilation_sizes = [[1, 3, 5], [1, 3, 5], [1, 3, 5]]
+
+        # Pre-convolution
+        self.conv_pre = Conv1d(
+            in_channels=in_channels,
+            out_channels=upsample_initial_channel,
+            kernel_size=7,
+            stride=1,
+            padding=3,
+        )
+
+        # Global conditioning projection
+        if gin_channels > 0:
+            self.cond = nn.Conv1d(gin_channels, upsample_initial_channel, 1)
+
+        # Upsampling layers
+        self.ups = nn.ModuleList()
+        self.resblocks = nn.ModuleList()
+
+        for i, (u, k) in enumerate(zip(upsample_rates, upsample_kernel_sizes)):
+            self.ups.append(
+                weight_norm(
+                    ConvTranspose1d(
+                        in_channels=upsample_initial_channel // (2**i),
+                        out_channels=upsample_initial_channel // (2 ** (i + 1)),
+                        kernel_size=k,
+                        stride=u,
+                        padding=(k - u) // 2,
+                    )
+                )
+            )
+
+            # Residual blocks for this upsampling stage
+            ch = upsample_initial_channel // (2 ** (i + 1))
+            for res_k, res_d in zip(resblock_kernel_sizes, resblock_dilation_sizes):
+                self.resblocks.append(HifiGANResBlock(ch, res_k, tuple(res_d), lrelu_slope))
+
+        # Post-convolution
+        self.conv_post = weight_norm(
+            Conv1d(
+                in_channels=ch,
+                out_channels=out_channels,
+                kernel_size=7,
+                stride=1,
+                padding=3,
+            )
+        )
+
+        self.apply(init_weights)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        g: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Args:
+            x: Input tensor of shape (batch, in_channels, time).
+            g: Global conditioning tensor of shape (batch, gin_channels, 1).
+
+        Returns:
+            Generated audio of shape (batch, out_channels, time * upsample_factor).
+        """
+        x = self.conv_pre(x)
+
+        # Apply global conditioning
+        if g is not None and self.gin_channels > 0:
+            x = x + self.cond(g)
+
+        # Upsampling and residual blocks
+        resblock_idx = 0
+        for i, up in enumerate(self.ups):
+            x = torch.nn.functional.leaky_relu(x, self.lrelu_slope)
+            x = up(x)
+
+            # Sum residual blocks
+            xs = None
+            for _ in range(len(self.resblocks) // self.num_upsamples):
+                if resblock_idx < len(self.resblocks):
+                    if xs is None:
+                        xs = self.resblocks[resblock_idx](x)
+                    else:
+                        xs = xs + self.resblocks[resblock_idx](x)
+                    resblock_idx += 1
+
+            if xs is not None:
+                x = xs / (len(self.resblocks) // self.num_upsamples)
+
+        x = torch.nn.functional.leaky_relu(x)
+        x = self.conv_post(x)
+        x = torch.tanh(x)
+
+        return x
+
+    def remove_weight_norm(self):
+        """Remove weight normalization from all layers."""
+        for up in self.ups:
+            remove_weight_norm(up)
+        for resblock in self.resblocks:
+            resblock.remove_weight_norm()
+        remove_weight_norm(self.conv_post)

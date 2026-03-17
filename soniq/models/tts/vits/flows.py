@@ -17,7 +17,13 @@ from .encoders import WN, LayerNorm
 class Flip(nn.Module):
     """Flip layer for flow - reverses channel order."""
 
-    def forward(self, x: torch.Tensor, reverse: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_mask: Optional[torch.Tensor] = None,
+        g: Optional[torch.Tensor] = None,
+        reverse: bool = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         x = torch.flip(x, [1])
         log_det = torch.zeros(x.shape[0], device=x.device)
         return x, log_det

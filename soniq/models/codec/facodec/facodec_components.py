@@ -259,15 +259,16 @@ class ResidualVectorQuantize(nn.Module):
             codes: Quantization codes (batch, n_q, seq_len).
 
         Returns:
-            z: Decoded output.
+            z: Decoded output (batch, input_dim, seq_len).
             codes: Same as input.
-            latents: Latent representations.
-            commitment: Commitment values.
+            latents: Latent representations (None).
+            commitment: Commitment values (None).
         """
         batch_size, n_q, seq_len = codes.shape
+        n_q = min(n_q, self.n_codebooks)
 
-        # Initialize output
-        z = torch.zeros(batch_size, seq_len, self.codebook_dim * self.n_codebooks, device=codes.device)
+        # Sum embeddings from each codebook level (residual decoding)
+        quantized_sum = torch.zeros(batch_size, seq_len, self.codebook_dim, device=codes.device)
 
         for i in range(n_q):
             code_i = codes[:, i, :]  # (batch, seq_len)
@@ -275,13 +276,26 @@ class ResidualVectorQuantize(nn.Module):
 
             # Lookup embeddings
             embed = F.embedding(code_i, codebook)  # (batch, seq_len, codebook_dim)
-            z[:, :, i * self.codebook_dim:(i + 1) * self.codebook_dim] = embed
+            quantized_sum = quantized_sum + embed
 
-        # Project back
-        z = self.project_out(z)
+        # Project back to input dim
+        z = self.project_out(quantized_sum)
         z = z.transpose(1, 2)  # (batch, input_dim, seq_len)
 
         return z, codes, None, None
+
+    def vq2emb(self, codes: torch.Tensor) -> torch.Tensor:
+        """
+        Convert VQ codes to embeddings (alias for from_codes for compatibility).
+
+        Args:
+            codes: Quantization codes (batch, n_q, seq_len).
+
+        Returns:
+            z: Decoded output (batch, input_dim, seq_len).
+        """
+        z, _, _, _ = self.from_codes(codes)
+        return z
 
 
 # ============================================================================

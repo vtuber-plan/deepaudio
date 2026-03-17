@@ -240,17 +240,71 @@ class FACodec(BaseCodecModel):
             n_t: Number of timbre codebooks to use.
 
         Returns:
-            Dictionary containing codes for each component.
+            Dictionary containing codes for each component:
+                - prosody_codes: Prosody quantization codes (batch, n_p, seq_len')
+                - content_codes: Content quantization codes (batch, n_c, seq_len')
+                - timbre_codes: Timbre quantization codes (if not using timbre_norm)
+                - residual_codes: Residual quantization codes (batch, n_r, seq_len')
+                - speaker_embedding: Speaker/timbre embedding (batch, in_dim)
         """
+        # Ensure correct shape
+        if audio.dim() == 2:
+            audio = audio.unsqueeze(1)
+
         # Encode
         encoded = self.encoder(audio)
 
-        # Get codes from each quantizer
+        # Quantize each component
         codes = {}
 
-        # This is a simplified version - full implementation would extract
-        # codes from each quantizer separately
-        _, _, _, _ = self.quantizer(encoded, wave_segments=audio, n_c=n_c, n_t=n_t)
+        # Prosody codes
+        z_p, codes_p, _, _, _ = self.quantizer.prosody_quantizer(
+            encoded, self.quantizer.n_p_codebooks
+        )
+        codes["prosody_codes"] = codes_p
+        codes["prosody_quantized"] = z_p
+
+        # Content codes
+        z_c, codes_c, _, _, _ = self.quantizer.content_quantizer(
+            encoded, n_c if n_c else self.quantizer.n_c_codebooks
+        )
+        codes["content_codes"] = codes_c
+        codes["content_quantized"] = z_c
+
+        # Timbre handling
+        if not self.config.timbre_norm:
+            timbre_residual = encoded - z_p.detach() - z_c.detach()
+            z_t, codes_t, _, _, _ = self.quantizer.timbre_quantizer(
+                timbre_residual, n_t if n_t else self.quantizer.n_t_codebooks
+            )
+            codes["timbre_codes"] = codes_t
+            codes["timbre_quantized"] = z_t
+        else:
+            # Extract speaker embedding from mel
+            mel = self.preprocess_mel(audio)
+            mask = torch.ones(mel.shape[0], 1, mel.shape[2], device=mel.device)
+            speaker_emb = self.style_encoder(mel, mask)
+            codes["speaker_embedding"] = speaker_emb
+
+        # Residual codes
+        if self.quantizer.n_r_codebooks > 0:
+            if self.config.timbre_norm:
+                residual = encoded - z_p.detach() - z_c.detach()
+            else:
+                residual = encoded - z_p.detach() - z_c.detach() - z_t.detach()
+            z_r, codes_r, _, _, _ = self.quantizer.residual_quantizer(
+                residual, self.quantizer.n_r_codebooks
+            )
+            codes["residual_codes"] = codes_r
+            codes["residual_quantized"] = z_r
+
+        # Compute combined quantized output
+        quantized_out = z_p.detach() + z_c.detach()
+        if "timbre_quantized" in codes:
+            quantized_out = quantized_out + codes["timbre_quantized"]
+        if "residual_quantized" in codes:
+            quantized_out = quantized_out + codes["residual_quantized"]
+        codes["quantized"] = quantized_out
 
         return codes
 
@@ -258,19 +312,96 @@ class FACodec(BaseCodecModel):
     def decode(
         self,
         codes: Dict[str, torch.Tensor],
+        speaker_embedding: Optional[torch.Tensor] = None,
+        use_residual: bool = True,
     ) -> torch.Tensor:
         """
         Decode codes to audio.
 
         Args:
-            codes: Dictionary containing codes for each component.
+            codes: Dictionary containing quantization codes:
+                - prosody_codes: Prosody codes (batch, n_p, seq_len)
+                - content_codes: Content codes (batch, n_c, seq_len)
+                - timbre_codes: Timbre codes (optional, batch, n_t, seq_len)
+                - residual_codes: Residual codes (optional, batch, n_r, seq_len)
+            speaker_embedding: Speaker/timbre embedding for voice conversion.
+            use_residual: Whether to use residual codes.
 
         Returns:
-            reconstructed: Reconstructed audio (batch, 1, seq_len).
+            reconstructed: Reconstructed audio (batch, 1, seq_len * hop_length).
         """
-        # This is a simplified version - full implementation would
-        # reconstruct from codes using the quantizer's from_codes method
-        raise NotImplementedError("Decode from codes not yet implemented")
+        # Convert codes to embeddings
+        quantized = self.vq2emb(codes, use_residual=use_residual)
+
+        # Apply timbre modulation if speaker embedding provided
+        if speaker_embedding is not None and hasattr(self.quantizer, 'timbre_linear'):
+            style = self.quantizer.timbre_linear(speaker_embedding).unsqueeze(2)
+            gamma, beta = style.chunk(2, dim=1)
+            quantized = quantized * gamma + beta
+
+        # Decode through decoder
+        reconstructed = self.decoder(quantized)
+
+        return reconstructed
+
+    def vq2emb(
+        self,
+        codes: Dict[str, torch.Tensor],
+        use_residual: bool = True,
+    ) -> torch.Tensor:
+        """
+        Convert VQ codes to embeddings.
+
+        Args:
+            codes: Dictionary containing quantization codes.
+            use_residual: Whether to include residual codes.
+
+        Returns:
+            Combined embedding (batch, in_dim, seq_len).
+        """
+        out = 0.0
+
+        # Prosody embedding
+        if "prosody_codes" in codes:
+            z_p, _, _, _ = self.quantizer.prosody_quantizer.from_codes(codes["prosody_codes"])
+            out = out + z_p
+
+        # Content embedding
+        if "content_codes" in codes:
+            z_c, _, _, _ = self.quantizer.content_quantizer.from_codes(codes["content_codes"])
+            out = out + z_c
+
+        # Timbre embedding (if not using timbre_norm)
+        if "timbre_codes" in codes and hasattr(self.quantizer, 'timbre_quantizer'):
+            z_t, _, _, _ = self.quantizer.timbre_quantizer.from_codes(codes["timbre_codes"])
+            out = out + z_t
+
+        # Residual embedding
+        if "residual_codes" in codes and use_residual and self.quantizer.n_r_codebooks > 0:
+            z_r, _, _, _ = self.quantizer.residual_quantizer.from_codes(codes["residual_codes"])
+            out = out + z_r
+
+        return out
+
+    @torch.no_grad()
+    def inference(
+        self,
+        codes: Dict[str, torch.Tensor],
+        speaker_embedding: torch.Tensor,
+        use_residual: bool = True,
+    ) -> torch.Tensor:
+        """
+        Inference with speaker embedding for voice conversion.
+
+        Args:
+            codes: Dictionary containing quantization codes.
+            speaker_embedding: Target speaker embedding.
+            use_residual: Whether to use residual codes.
+
+        Returns:
+            Reconstructed audio with target speaker timbre.
+        """
+        return self.decode(codes, speaker_embedding, use_residual)
 
     @torch.no_grad()
     def voice_conversion(

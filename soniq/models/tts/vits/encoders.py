@@ -323,7 +323,12 @@ class WN(torch.nn.Module):
             self.in_layers.append(nn.Sequential(
                 nn.Conv1d(hidden_channels, 2 * hidden_channels, kernel_size, dilation=dilation, padding=padding),
             ))
-            self.res_skip_layers.append(nn.Conv1d(hidden_channels, 2 * hidden_channels, 1))
+
+            # Last layer outputs hidden_channels, others output 2 * hidden_channels
+            if i == n_layers - 1:
+                self.res_skip_layers.append(nn.Conv1d(hidden_channels, hidden_channels, 1))
+            else:
+                self.res_skip_layers.append(nn.Conv1d(hidden_channels, 2 * hidden_channels, 1))
 
     def forward(
         self,
