@@ -1,5 +1,12 @@
-"""Datasets for Soniq."""
+# coding=utf-8
+"""
+Datasets for Soniq.
 
-from .base_dataset import BaseDataset, BaseCollator, build_dataloader
+.. deprecated::
+    Use `soniq.data` instead. This module is kept for backwards compatibility.
+"""
+
+# Backwards compatibility - import from new location
+from soniq.data import BaseDataset, BaseCollator, build_dataloader
 
 __all__ = ["BaseDataset", "BaseCollator", "build_dataloader"]

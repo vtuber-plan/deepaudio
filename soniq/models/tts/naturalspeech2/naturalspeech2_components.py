@@ -207,7 +207,13 @@ class PriorEncoder(nn.Module):
             batch_first=True,
             norm_first=True,
         )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.encoder_layers)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.encoder_layers, enable_nested_tensor=False)
+
+        # Speaker embedding projection (query_hidden -> encoder_hidden)
+        if config.query_hidden != config.encoder_hidden:
+            self.spk_proj = nn.Linear(config.query_hidden, config.encoder_hidden)
+        else:
+            self.spk_proj = None
 
         # Predictors
         self.duration_predictor = DurationPredictor(
@@ -257,6 +263,9 @@ class PriorEncoder(nn.Module):
 
         # Add speaker conditioning if available
         if ref_emb is not None:
+            # Project speaker embedding to match encoder_hidden
+            if self.spk_proj is not None:
+                ref_emb = self.spk_proj(ref_emb)
             x = x + ref_emb.unsqueeze(1)
 
         x = self.encoder(x, src_key_padding_mask=phone_mask)
@@ -293,7 +302,7 @@ class PriorEncoder(nn.Module):
                     pitch = torch.cat([pitch, mean_pitch], dim=1)
 
             # Bucketize pitch
-            pitch_bucket = torch.bucketize(pitch, self.pitch_bins)
+            pitch_bucket = torch.bucketize(pitch.contiguous(), self.pitch_bins)
             pitch_embed = self.pitch_embedding(pitch_bucket)
             prior_out = prior_out + pitch_embed
 
@@ -366,9 +375,16 @@ class ResidualBlock(nn.Module):
 
         # Cross-attention (optional)
         if has_cattn:
+            # Project speaker embedding to hidden_dim if needed
+            if cattn_dim != hidden_dim:
+                self.spk_proj = nn.Linear(cattn_dim, hidden_dim)
+            else:
+                self.spk_proj = None
             self.attn = nn.MultiheadAttention(hidden_dim, nhead, batch_first=True)
             self.film = nn.Linear(hidden_dim, hidden_dim * 2)
             self.ln = nn.LayerNorm(hidden_dim)
+        else:
+            self.spk_proj = None
 
     def forward(
         self,
@@ -405,6 +421,9 @@ class ResidualBlock(nn.Module):
 
         # Cross-attention (optional)
         if self.has_cattn and spk_query_emb is not None:
+            # Project speaker embedding if needed
+            if self.spk_proj is not None:
+                spk_query_emb = self.spk_proj(spk_query_emb)
             h_trans = h.transpose(1, 2)  # (batch, seq_len, hidden)
             attn_out, _ = self.attn(h_trans, spk_query_emb, spk_query_emb, is_causal=False)
             film_out = self.film(attn_out)

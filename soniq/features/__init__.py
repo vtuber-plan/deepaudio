@@ -1,6 +1,11 @@
-"""Feature extraction for Soniq."""
+# coding=utf-8
+"""
+Feature extraction for Soniq.
 
-from .mel_features import MelFeatures
-from .f0_features import F0Features
+.. deprecated::
+    Use `soniq.processing.features` instead. This module is kept for backwards compatibility.
+"""
 
-__all__ = ["MelFeatures", "F0Features"]
+from soniq.processing.features import F0Features, MelFeatures
+
+__all__ = ["F0Features", "MelFeatures"]

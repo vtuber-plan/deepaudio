@@ -5,9 +5,8 @@ from typing import Any, Callable, Dict, List, Optional
 import torch
 import os
 
-from soniq.data.dataset_base import ManifestDataset
-from soniq.data.collator_base import BaseCollator
-from soniq.processing.audio.io import load_audio
+from soniq.data import ManifestDataset, BaseCollator
+from soniq.processing.audio import load_audio
 from soniq.processing.features.mel import MelSpectrogramExtractor
 
 

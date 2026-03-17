@@ -1,0 +1,37 @@
+{
+  "name": "vocos_default",
+  "output_dir": "outputs/vocos",
+  "model": {
+    "model_type": "Vocos",
+    "model_args": {
+      "input_channels": 128,
+      "dim": 384,
+      "intermediate_dim": 1152,
+      "num_layers": 8,
+      "n_fft": 800,
+      "hop_size": 200,
+      "padding": "same"
+    }
+  },
+  "train": {
+    "learning_rate": 2e-4,
+    "betas": [0.8, 0.99],
+    "lr_decay": 0.999,
+    "batch_size": 32,
+    "max_epochs": 100,
+    "gradient_clip_val": 1.0,
+    "warmup_steps": 1000
+  },
+  "data": {
+    "sample_rate": 24000,
+    "n_fft": 1024,
+    "hop_length": 256,
+    "win_length": 1024,
+    "n_mel": 128,
+    "f_min": 0.0,
+    "f_max": 12000.0,
+    "segment_size": 8192,
+    "train_manifest": "data/train.json",
+    "val_manifest": "data/val.json"
+  }
+}

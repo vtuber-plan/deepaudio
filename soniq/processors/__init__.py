@@ -1,6 +1,11 @@
-"""Processors for audio preprocessing in Soniq."""
+# coding=utf-8
+"""
+Processors for audio preprocessing in Soniq.
 
-from .acoustic_extractor import AcousticExtractor
-from .phone_extractor import PhoneExtractor
+.. deprecated::
+    Use `soniq.processing.extractors` instead. This module is kept for backwards compatibility.
+"""
+
+from soniq.processing.extractors import AcousticExtractor, PhoneExtractor
 
 __all__ = ["AcousticExtractor", "PhoneExtractor"]

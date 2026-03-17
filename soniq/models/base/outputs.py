@@ -26,6 +26,7 @@ class TTSOutput(ModelOutput):
     """Output for TTS models."""
     waveform: Optional[torch.Tensor] = None
     mel_spectrogram: Optional[torch.Tensor] = None
+    latents: Optional[torch.Tensor] = None
     durations: Optional[torch.Tensor] = None
     alignments: Optional[torch.Tensor] = None
 

@@ -1,0 +1,50 @@
+{
+  "name": "jets_default",
+  "output_dir": "outputs/jets",
+  "model": {
+    "model_type": "Jets",
+    "model_args": {
+      "vocab_size": 178,
+      "hidden_dim": 256,
+      "n_mel": 80,
+      "sample_rate": 22050,
+      "encoder_layers": 4,
+      "encoder_heads": 2,
+      "decoder_layers": 6,
+      "decoder_heads": 2,
+      "filter_size": 1024,
+      "variance_filter_size": 256,
+      "variance_kernel_size": 3,
+      "variance_dropout": 0.5
+    }
+  },
+  "loss": {
+    "mel_loss_weight": 45.0,
+    "duration_loss_weight": 1.0,
+    "pitch_loss_weight": 1.0,
+    "energy_loss_weight": 1.0,
+    "align_loss_weight": 2.0,
+    "adv_loss_weight": 1.0,
+    "fm_loss_weight": 2.0
+  },
+  "train": {
+    "learning_rate": 2e-4,
+    "betas": [0.8, 0.99],
+    "lr_decay": 0.999875,
+    "batch_size": 16,
+    "max_epochs": 100,
+    "gradient_clip_val": 1.0,
+    "segment_size": 64
+  },
+  "data": {
+    "sample_rate": 22050,
+    "n_fft": 1024,
+    "hop_length": 256,
+    "win_length": 1024,
+    "n_mel": 80,
+    "f_min": 0.0,
+    "f_max": 8000.0,
+    "train_manifest": "data/train.json",
+    "val_manifest": "data/val.json"
+  }
+}

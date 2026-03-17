@@ -19,8 +19,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from soniq.config import ExperimentConfig
 from soniq.models.vocoders.hifigan import HifiGAN, HifiGANConfig
+from soniq.models.vocoders.vocos import Vocos, VocosConfig as VocosModelConfig
 from soniq.tasks.vocoder.datasets import VocoderDataset, VocoderCollator
 from soniq.tasks.vocoder.system import VocoderTaskSystem, VocoderConfig
+from soniq.tasks.vocoder.vocos_system import VocosTaskSystem, VocosConfig as VocosTrainConfig
 from soniq.runtime import FabricTrainer
 
 
@@ -53,25 +55,59 @@ def main():
     # Save config
     experiment_config.to_json(os.path.join(exp_dir, "config.json"))
 
-    # Create model
+    # Create model based on model_type
     model_config = experiment_config.model
-    hifi_config = HifiGANConfig(**model_config.model_args)
-    generator = HifiGAN(hifi_config)
+    model_type = getattr(model_config, 'model_type', 'HiFiGAN')
+
+    if model_type == 'Vocos':
+        # Create Vocos model
+        vocos_config = VocosModelConfig(**model_config.model_args)
+        generator = Vocos(
+            input_channels=vocos_config.input_channels,
+            dim=vocos_config.dim,
+            intermediate_dim=vocos_config.intermediate_dim,
+            num_layers=vocos_config.num_layers,
+            n_fft=vocos_config.n_fft,
+            hop_size=vocos_config.hop_size,
+            padding=vocos_config.padding,
+        )
+
+        # Create Vocos task system
+        train_config = VocosTrainConfig(
+            learning_rate=experiment_config.train.learning_rate,
+            betas=tuple(experiment_config.train.betas),
+            lr_decay=experiment_config.train.lr_decay,
+            segment_size=experiment_config.data.segment_size,
+            lambda_mel=experiment_config.loss.get('mel_loss_weight', 10.0) if hasattr(experiment_config, 'loss') else 10.0,
+            lambda_adv=experiment_config.loss.get('adv_loss_weight', 2.0) if hasattr(experiment_config, 'loss') else 2.0,
+            lambda_fm=experiment_config.loss.get('fm_loss_weight', 2.0) if hasattr(experiment_config, 'loss') else 2.0,
+            sample_rate=experiment_config.data.sample_rate,
+            n_fft=experiment_config.data.n_fft,
+            hop_size=experiment_config.data.hop_length,
+        )
+
+        system = VocosTaskSystem(
+            config=train_config,
+            generator=generator,
+        )
+    else:
+        # Create HiFiGAN model (default)
+        hifi_config = HifiGANConfig(**model_config.model_args)
+        generator = HifiGAN(hifi_config)
+
+        # Create vocoder config
+        vocoder_config = VocoderConfig(
+            learning_rate=experiment_config.train.learning_rate,
+            segment_size=experiment_config.data.segment_size,
+        )
+
+        # Create system (will create discriminators internally)
+        system = VocoderTaskSystem(
+            config=vocoder_config,
+            generator=generator,
+        )
 
     print(f"Generator parameters: {sum(p.numel() for p in generator.parameters()) / 1e6:.2f}M")
-
-    # Create vocoder config
-    vocoder_config = VocoderConfig(
-        learning_rate=experiment_config.train.learning_rate,
-        segment_size=experiment_config.data.segment_size,
-    )
-
-    # Create system (will create discriminators internally)
-    system = VocoderTaskSystem(
-        config=vocoder_config,
-        generator=generator,
-    )
-
     print(f"Total parameters: {sum(p.numel() for p in system.parameters()) / 1e6:.2f}M")
 
     # Create datasets

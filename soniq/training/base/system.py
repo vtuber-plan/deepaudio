@@ -4,14 +4,13 @@
 from typing import Any, Dict, List, Union
 import torch
 from torch import nn
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from .outputs import StepOutput as _StepOutput
 
 
-@dataclass
-class StepOutput:
-    loss: torch.Tensor
-    metrics: Dict[str, float]
-    logs: Dict[str, Any]
+# 保持向后兼容，从 outputs 导出
+StepOutput = _StepOutput
 
 
 class BaseTaskSystem(nn.Module):

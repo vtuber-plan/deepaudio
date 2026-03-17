@@ -8,9 +8,9 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LRScheduler
 from dataclasses import dataclass
 
-from soniq.tasks.base.system import BaseTaskSystem, StepOutput
-from soniq.tasks.vocoder.objectives.generator_loss import GeneratorLoss
-from soniq.tasks.vocoder.objectives.discriminator_loss import DiscriminatorLoss
+from ..base.system import BaseTaskSystem, StepOutput
+from .objectives.generator_loss import GeneratorLoss
+from .objectives.discriminator_loss import DiscriminatorLoss
 from soniq.models.vocoders.hifigan import HifiGAN
 from soniq.models.vocoders.hifigan.discriminator import (
     HiFiGANMultiPeriodDiscriminator,

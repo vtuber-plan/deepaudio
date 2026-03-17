@@ -71,7 +71,7 @@ class NaturalSpeech2(BaseTTSModel):
             batch_first=True,
             norm_first=True,
         )
-        self.prompt_encoder = nn.TransformerEncoder(prompt_encoder_layer, num_layers=2)
+        self.prompt_encoder = nn.TransformerEncoder(prompt_encoder_layer, num_layers=2, enable_nested_tensor=False)
 
         # Project latent dim if needed
         if config.latent_dim != config.query_hidden:
@@ -211,12 +211,13 @@ class NaturalSpeech2(BaseTTSModel):
         )
 
         # 6. Compute noise prediction
-        eps_pred = (xt - x0_pred * mean_coeff[:, None, None]) / torch.sqrt(variance[:, None, None] + 1e-8)
+        variance_safe = variance + 1e-8
+        eps_pred = (xt - x0_pred * mean_coeff[:, None, None]) / torch.sqrt(variance_safe[:, None, None])
 
         # 7. Compute losses
         # Diffusion loss (predict x0)
         diff_loss = F.l1_loss(x0_pred, latents, reduction="none")
-        diff_loss = (diff_loss * output_mask_2d).sum() / output_mask_2d.sum()
+        diff_loss = (diff_loss * output_mask_2d).sum() / (output_mask_2d.sum() + 1e-8)
 
         # Prior losses
         # Duration loss
@@ -231,11 +232,17 @@ class NaturalSpeech2(BaseTTSModel):
 
         # Pitch loss
         if pitch is not None and pitch_bucket is not None:
+            # Trim pitch to match output length
+            pitch_trimmed = pitch[:, :max_mel_len]
+            pitch_target = torch.log(pitch_trimmed.float() + 1.0)  # Add 1 to avoid log(0)
             pitch_loss = F.l1_loss(
                 pitch_pred_log[output_mask],
-                torch.log(pitch[output_mask].float() + 1e-6),
+                pitch_target[output_mask],
                 reduction="mean",
             )
+            # Handle case where mask is empty
+            if torch.isnan(pitch_loss):
+                pitch_loss = torch.tensor(0.0, device=latents.device)
         else:
             pitch_loss = torch.tensor(0.0, device=latents.device)
 

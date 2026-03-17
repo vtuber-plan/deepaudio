@@ -3,7 +3,7 @@
 
 from typing import Any, Dict, List, Optional
 import torch
-from soniq.data.collator_base import BaseCollator
+from soniq.data import BaseCollator
 
 
 class VocoderCollator(BaseCollator):
